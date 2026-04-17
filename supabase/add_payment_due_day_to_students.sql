@@ -1,0 +1,2 @@
+ALTER TABLE public.students
+ADD COLUMN IF NOT EXISTS payment_due_day INTEGER DEFAULT 9;
