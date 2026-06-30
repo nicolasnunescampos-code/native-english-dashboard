@@ -15,6 +15,7 @@ interface StudentProgress {
     studentName: string;
     currentLevel: string; // Normalized: Beginner, Intermediate, Advanced, Advanced 2
     currentChapter: number;
+    needsExam?: boolean;
 }
 
 interface GroupedByLevel {
@@ -63,13 +64,12 @@ const AdminProgress: React.FC = () => {
 
             if (studentsError) throw studentsError;
 
-            // 2. Fetch ALL Graded Classes for this Type
+            // 2. Fetch ALL Graded Classes for this Type AND Exams
             const { data: classes, error: classesError } = await supabase
                 .from('classes')
-                .select('student_name, class_chapter, class_level, date, time')
-                .eq('class_type', activeType)
-                .not('class_grade', 'is', null)
-                .not('class_chapter', 'is', null);
+                .select('student_name, class_chapter, class_level, date, time, class_type')
+                .in('class_type', [activeType, 'Exam'])
+                .not('class_grade', 'is', null);
 
             if (classesError) throw classesError;
 
@@ -78,17 +78,21 @@ const AdminProgress: React.FC = () => {
                 const studentClasses = (classes || []).filter(c =>
                     c.student_name.trim().toLowerCase() === student.student_name.trim().toLowerCase()
                 );
+                
+                const activeClasses = studentClasses.filter(c => c.class_type === activeType && c.class_chapter !== null);
+                const examClasses = studentClasses.filter(c => c.class_type === 'Exam');
 
-                if (studentClasses.length === 0) {
+                if (activeClasses.length === 0) {
                     return {
                         studentName: student.student_name,
                         currentLevel: 'Beginner',
-                        currentChapter: 1
+                        currentChapter: 1,
+                        needsExam: false
                     };
                 }
 
                 // Find latest class
-                const lastClass = studentClasses.sort((a, b) => {
+                const lastClass = activeClasses.sort((a, b) => {
                     const dateA = new Date(`${a.date}T${a.time || '00:00'}`);
                     const dateB = new Date(`${b.date}T${b.time || '00:00'}`);
                     return dateB.getTime() - dateA.getTime();
@@ -102,8 +106,28 @@ const AdminProgress: React.FC = () => {
                     return {
                         studentName: student.student_name,
                         currentLevel: normalizeLevel(lastLevelName),
-                        currentChapter: 1
+                        currentChapter: 1,
+                        needsExam: false
                     };
+                }
+
+                let needsExam = false;
+                if (activeType === 'Grammar' && (lastClass.class_chapter === '5' || lastClass.class_chapter === '10')) {
+                    const grammarDate = new Date(`${lastClass.date}T${lastClass.time || '00:00'}`);
+                    const lastExam = examClasses.sort((a, b) => {
+                        const dateA = new Date(`${a.date}T${a.time || '00:00'}`);
+                        const dateB = new Date(`${b.date}T${b.time || '00:00'}`);
+                        return dateB.getTime() - dateA.getTime();
+                    })[0];
+                    
+                    if (!lastExam) {
+                        needsExam = true;
+                    } else {
+                        const examDate = new Date(`${lastExam.date}T${lastExam.time || '00:00'}`);
+                        if (examDate < grammarDate) {
+                            needsExam = true;
+                        }
+                    }
                 }
 
                 // Logic: Next Chapter
@@ -125,12 +149,14 @@ const AdminProgress: React.FC = () => {
                 return {
                     studentName: student.student_name,
                     currentLevel: currentNormalized,
-                    currentChapter: nextChapter
+                    currentChapter: nextChapter,
+                    needsExam
                 };
             });
 
-            // 4. Group Data Hierarchy: Level -> Chapter -> Students
-            const groups: GroupedByLevel = {
+            type StudentWithExam = { name: string; needsExam: boolean };
+            
+            const groups: Record<string, Record<number, StudentWithExam[]>> = {
                 'Beginner': {},
                 'Intermediate': {},
                 'Advanced': {},
@@ -144,7 +170,7 @@ const AdminProgress: React.FC = () => {
                 if (!groups[lvl]) groups[lvl] = {};
                 if (!groups[lvl][ch]) groups[lvl][ch] = [];
 
-                groups[lvl][ch].push(stat.studentName);
+                groups[lvl][ch].push({ name: stat.studentName, needsExam: stat.needsExam || false });
             });
 
             setGroupedData(groups);
@@ -227,13 +253,14 @@ const AdminProgress: React.FC = () => {
                                             {/* Student Card */}
                                             <Card className="flex-1 hover:shadow-md transition-shadow">
                                                 <CardContent className="p-4 flex flex-wrap gap-2 items-center">
-                                                    {students.sort().map(name => (
+                                                    {students.sort((a, b) => a.name.localeCompare(b.name)).map(student => (
                                                         <Badge
-                                                            key={name}
-                                                            variant="secondary"
-                                                            className="px-3 py-1.5 text-sm bg-secondary/40 hover:bg-secondary border-transparent hover:border-primary/20 transition-all cursor-default"
+                                                            key={student.name}
+                                                            variant={student.needsExam ? "destructive" : "secondary"}
+                                                            className={`px-3 py-1.5 text-sm transition-all cursor-default ${student.needsExam ? 'bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/30' : 'bg-secondary/40 hover:bg-secondary border-transparent hover:border-primary/20'}`}
                                                         >
-                                                            {name}
+                                                            {student.name}
+                                                            {student.needsExam && <span className="ml-1.5 text-[10px] uppercase font-bold tracking-wider">Exam Due</span>}
                                                         </Badge>
                                                     ))}
                                                 </CardContent>

@@ -4,6 +4,7 @@ import { supabase, Material } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ExternalLink } from 'lucide-react';
+import { getThumbnailSrc } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const TeacherMaterials: React.FC = () => {
@@ -32,10 +33,10 @@ const TeacherMaterials: React.FC = () => {
   }, []);
 
   const categories = [
-    { key: 'business', label: 'Business' },
     { key: 'Grammar', label: 'Grammar' },
     { key: 'Entertainment', label: 'Entertainment' },
     { key: 'Club', label: 'Conversation Club' },
+    { key: 'business', label: 'Business' },
   ];
   const levels = ['Beginner', 'Intermediate', 'Advanced', 'Business', 'Club'] as const;
 
@@ -84,7 +85,7 @@ const TeacherMaterials: React.FC = () => {
         📚 Teaching Materials
       </h2>
 
-      <Tabs defaultValue="business" className="w-full">
+      <Tabs defaultValue="Grammar" className="w-full">
         <TabsList className="mb-4 flex-wrap h-auto">
           {categories.map((category) => (
             <TabsTrigger key={category.key} value={category.key}>
@@ -109,10 +110,25 @@ const TeacherMaterials: React.FC = () => {
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {levelMaterials.map((material, index) => (
-                      <Card key={index} className="hover:shadow-md transition-shadow">
-                        <CardContent className="p-4">
-                          <h4 className="font-medium mb-2">{material.title}</h4>
-                          <Button size="sm" variant="outline" asChild className="w-full">
+                      <Card key={index} className="overflow-hidden hover:shadow-lg transition-all group flex flex-col h-full border-muted-foreground/20">
+                        <div className="w-full aspect-video bg-muted relative shrink-0 overflow-hidden">
+                          <img
+                              src={getThumbnailSrc(material.thumbnail_url || '', material.url)}
+                              alt={material.title}
+                              className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300 p-2"
+                              onError={(e) => {
+                                  (e.target as HTMLImageElement).src = 'https://placehold.co/600x400/2a2a2a/ffffff?text=Material';
+                              }}
+                          />
+                        </div>
+                        <CardContent className="p-4 flex flex-col flex-1">
+                          <h4 className="font-semibold text-lg leading-tight line-clamp-1 mb-2">{material.title}</h4>
+                          {material.description && (
+                            <p className="text-sm text-muted-foreground line-clamp-2 mt-2 mb-4 flex-1">
+                              {material.description}
+                            </p>
+                          )}
+                          <Button size="sm" variant="default" asChild className="w-full mt-auto shadow-sm">
                             <a href={material.url} target="_blank" rel="noopener noreferrer">
                               Open Material
                               <ExternalLink className="ml-2 h-3 w-3" />
@@ -143,10 +159,25 @@ const TeacherMaterials: React.FC = () => {
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {otherMaterials.map((material, index) => (
-                      <Card key={`other-${index}`} className="hover:shadow-md transition-shadow">
-                        <CardContent className="p-4">
-                          <h4 className="font-medium mb-2">{material.title}</h4>
-                          <Button size="sm" variant="outline" asChild className="w-full">
+                      <Card key={`other-${index}`} className="overflow-hidden hover:shadow-lg transition-all group flex flex-col h-full border-muted-foreground/20">
+                        <div className="w-full aspect-video bg-muted relative shrink-0 overflow-hidden">
+                          <img
+                              src={getThumbnailSrc(material.thumbnail_url || '', material.url)}
+                              alt={material.title}
+                              className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300 p-2"
+                              onError={(e) => {
+                                  (e.target as HTMLImageElement).src = 'https://placehold.co/600x400/2a2a2a/ffffff?text=Material';
+                              }}
+                          />
+                        </div>
+                        <CardContent className="p-4 flex flex-col flex-1">
+                          <h4 className="font-semibold text-lg leading-tight line-clamp-1 mb-2">{material.title}</h4>
+                          {material.description && (
+                            <p className="text-sm text-muted-foreground line-clamp-2 mt-2 mb-4 flex-1">
+                              {material.description}
+                            </p>
+                          )}
+                          <Button size="sm" variant="default" asChild className="w-full mt-auto shadow-sm">
                             <a href={material.url} target="_blank" rel="noopener noreferrer">
                               Open Material
                               <ExternalLink className="ml-2 h-3 w-3" />

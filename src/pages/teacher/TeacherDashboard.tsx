@@ -7,6 +7,7 @@ import { Link } from "react-router-dom"
 import { Calendar, Users, MessageSquare, BookOpen, ExternalLink } from "lucide-react"
 import { format } from "date-fns"
 import { toLocalDate, formatClassTime, getTimeZoneLabel } from "@/lib/dateUtils"
+import { ReadOnlyCalendar } from "@/components/calendar/ReadOnlyCalendar"
 
 export default function TeacherDashboard() {
     const { user, teacherName } = useAuth()
@@ -37,7 +38,7 @@ export default function TeacherDashboard() {
                 .from('classes')
                 .select('*')
                 .gte('date', todayStr)
-                .ilike('title', `%${teacherName}%`)
+                .or(`title.eq.${teacherName},title.ilike.%- ${teacherName}%`)
                 .order('date', { ascending: true })
                 .order('time', { ascending: true })
                 .limit(15)
@@ -67,15 +68,34 @@ export default function TeacherDashboard() {
                 }))
             ]
 
-            if (normalized.length > 0) {
-                normalized.sort((a, b) => {
+            // Group into unique class blocks based on title/date/time
+            const groupedMap = new Map()
+            normalized.forEach(item => {
+                const key = `${item.date}|${item.time}|${item.title}`
+                if (groupedMap.has(key)) {
+                    const existing = groupedMap.get(key)
+                    if (item.student_name && !existing.student_names.includes(item.student_name)) {
+                        existing.student_names.push(item.student_name)
+                    }
+                } else {
+                    groupedMap.set(key, {
+                        ...item,
+                        student_names: item.student_name ? [item.student_name] : []
+                    })
+                }
+            })
+            
+            const groupedNormalized = Array.from(groupedMap.values())
+
+            if (groupedNormalized.length > 0) {
+                groupedNormalized.sort((a, b) => {
                     if (a.date !== b.date) return a.date.localeCompare(b.date)
                     return getMinutes(a.time) - getMinutes(b.time)
                 })
 
                 // Find the first class that hasn't finished yet (assuming 1hr duration)
                 const nowMins = new Date().getHours() * 60 + new Date().getMinutes()
-                const upcomingClass = normalized.find(cls => {
+                const upcomingClass = groupedNormalized.find(cls => {
                     if (cls.date > todayStr) return true;
                     if (cls.date === todayStr) {
                          // Keep showing it if it started less than 60 mins ago
@@ -104,7 +124,7 @@ export default function TeacherDashboard() {
             const { data: legacyClassesForStudents } = await supabase
                 .from('classes')
                 .select('student_name')
-                .ilike('title', `%${teacherName}%`)
+                .or(`title.eq.${teacherName},title.ilike.%- ${teacherName}%`)
 
             if (legacyClassesForStudents) {
                 legacyStudentNames = legacyClassesForStudents.map((c: any) => c.student_name).filter(Boolean)
@@ -161,45 +181,19 @@ export default function TeacherDashboard() {
         <div className="space-y-8 animate-fade-in pb-8">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-                {/* NEXT CLASS CARD */}
+                {/* SCHEDULE COMPACT VIEW */}
                 <Card className="shadow-sm hover:shadow-md transition flex flex-col">
-                    <CardHeader>
+                    <CardHeader className="flex flex-row items-center justify-between">
                         <CardTitle className="flex items-center gap-2">
                             <Calendar className="h-5 w-5 text-primary" />
-                            Next Class
+                            This Week's Schedule
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="flex flex-col flex-1 justify-between gap-4">
-                        {nextClass ? (
-                            <div className="space-y-3">
-                                <p className="text-2xl font-bold">
-                                    {(() => {
-                                        const localDate = toLocalDate(nextClass.date, nextClass.time)
-                                        return format(localDate, "EEEE, MMM d")
-                                    })()}
-                                </p>
-                                <div className="space-y-1">
-                                    <p className="text-lg font-semibold">{nextClass.student_name || nextClass.title}</p>
-                                    <p className="text-primary font-medium flex items-center gap-2">
-                                        at {formatClassTime(nextClass.date, nextClass.time)}
-                                        <span className="text-xs text-muted-foreground font-normal">({getTimeZoneLabel()})</span>
-                                    </p>
-                                </div>
-
-                                {nextClass.classroom_link && (
-                                    <Button asChild className="w-full mt-2">
-                                        <a href={nextClass.classroom_link} target="_blank" rel="noopener noreferrer">
-                                            Enter Class <ExternalLink className="ml-2 h-4 w-4" />
-                                        </a>
-                                    </Button>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="flex items-center justify-center flex-1 h-24 bg-muted/20 rounded-lg border border-dashed">
-                                <p className="text-muted-foreground">No upcoming classes</p>
-                            </div>
-                        )}
-                        <Button asChild variant="outline" className="w-full">
+                    <CardContent className="flex flex-col flex-1 gap-4">
+                        <div className="rounded-md border overflow-hidden flex-1">
+                            <ReadOnlyCalendar role="teacher" identifier={teacherName || ''} compact={true} />
+                        </div>
+                        <Button asChild className="w-full font-semibold">
                             <Link to="/teacher/schedule">View Full Schedule</Link>
                         </Button>
                     </CardContent>

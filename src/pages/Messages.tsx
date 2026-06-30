@@ -341,7 +341,7 @@ const Messages: React.FC = () => {
                                             >
                                                 <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
                                                 <p className={`text-[10px] mt-1 ${isMe ? 'text-primary-foreground/70 text-right' : 'text-muted-foreground'}`}>
-                                                    {format(new Date(msg.created_at), 'HH:mm')}
+                                                    {format(new Date(msg.created_at), 'MMM d, HH:mm')}
                                                 </p>
                                             </div>
                                         </div>

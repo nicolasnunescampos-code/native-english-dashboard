@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Users, UserMinus, UserCheck, AlertCircle, Calendar } from "lucide-react"
+import { Users, UserMinus, UserCheck, AlertCircle, Calendar, Plus, Trash2, CheckCircle2, Circle } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip, PieChart, Pie, Cell, Legend } from "recharts"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 
 const AdminMainDashboard: React.FC = () => {
   const [timeFilter, setTimeFilter] = useState<'month' | 'year' | 'all'>('month')

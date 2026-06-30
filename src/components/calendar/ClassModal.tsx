@@ -40,6 +40,7 @@ export interface ClassFormData {
     date: string;
     start_time: string;
     end_time: string;
+    timezone: string;
     teacher_id: string;
     student_ids: string[];
     status: 'draft' | 'published';
@@ -49,6 +50,7 @@ export interface ClassFormData {
     // Edit Mode
     edit_mode?: 'single' | 'following' | 'all';
     event_id?: string; // To track if it belongs to a series
+    merged_ids?: number[]; // Track all IDs belonging to this group
 }
 
 export interface ClassFormProps {
@@ -81,6 +83,7 @@ export const ClassModal: React.FC<ClassFormProps> = ({
         date: '',
         start_time: '',
         end_time: '',
+        timezone: 'America/Sao_Paulo',
         teacher_id: '',
         student_ids: [],
         status: 'published',
@@ -99,6 +102,7 @@ export const ClassModal: React.FC<ClassFormProps> = ({
             if (initialData) {
                 setFormData({
                     ...initialData,
+                    timezone: initialData.timezone || 'America/Sao_Paulo',
                     is_recurring: initialData.is_recurring ?? false,
                     edit_mode: initialData.edit_mode || 'single',
                     repeat_until: initialData.repeat_until || '',
@@ -110,6 +114,7 @@ export const ClassModal: React.FC<ClassFormProps> = ({
                     date: new Date().toISOString().split('T')[0],
                     start_time: '10:00',
                     end_time: '11:00',
+                    timezone: 'America/Sao_Paulo',
                     teacher_id: '',
                     student_ids: [],
                     status: 'published',
@@ -121,30 +126,36 @@ export const ClassModal: React.FC<ClassFormProps> = ({
         }
     }, [open, initialData]);
 
-    // Auto-generate title if it's empty or matches previous pattern
+    // Auto-generate title
     useEffect(() => {
-        if (!initialData) {
-            // Only auto-generate for new classes or if user hasn't heavily customized it
-            // Construct title: "StudentName's class - TeacherName"
+        const teacher = teachers.find(t => t.id === formData.teacher_id);
+        const studentNames = students
+            .filter(s => formData.student_ids.includes(s.id))
+            .map(s => s.student_name);
 
-            const teacher = teachers.find(t => t.id === formData.teacher_id);
-            const studentNames = students
-                .filter(s => formData.student_ids.includes(s.id))
-                .map(s => s.student_name);
+        let studentPart = 'Multiple Students';
+        if (studentNames.length === 0) {
+            studentPart = 'Class';
+        } else if (studentNames.length === 1) {
+            studentPart = `${studentNames[0]}'s class`;
+        } else {
+            const namesCopy = [...studentNames];
+            const last = namesCopy.pop();
+            studentPart = `${namesCopy.join(', ')} and ${last}'s class`;
+        }
 
-            let studentPart = 'Multiple Students';
-            if (studentNames.length === 0) studentPart = 'Class';
-            else if (studentNames.length === 1) studentPart = `${studentNames[0]}'s class`;
-            else if (studentNames.length <= 2) studentPart = `${studentNames.join(' & ')}'s class`;
-            else studentPart = `${studentNames[0]} & others class`;
+        const teacherPart = teacher ? ` - ${teacher.name}` : '';
+        const newTitle = `${studentPart}${teacherPart}`;
 
-            const teacherPart = teacher ? ` - ${teacher.name}` : '';
-
-            const newTitle = `${studentPart}${teacherPart}`;
-
+        // Only update if it's a new class OR the user hasn't manually changed the title
+        // We assume if the current title matches the standard format of ANY combination of students/teachers, it's safe to update.
+        // For simplicity, let's just always update it if it ends with "class" or "class - TeacherName", meaning it's a standard title.
+        const isStandardTitle = formData.title === '' || formData.title.includes('class');
+        
+        if (!initialData || isStandardTitle) {
             setFormData(prev => ({ ...prev, title: newTitle }));
         }
-    }, [formData.teacher_id, formData.student_ids, teachers, students, initialData]);
+    }, [formData.teacher_id, formData.student_ids, teachers, students]);
 
     const handleSubmit = () => {
         onSubmit(formData);
@@ -333,6 +344,23 @@ export const ClassModal: React.FC<ClassFormProps> = ({
                                 }
                             />
                         </div>
+                    </div>
+
+                    {/* TIMEZONE */}
+                    <div className="grid gap-2">
+                        <Label>Timezone</Label>
+                        <Select
+                            value={formData.timezone}
+                            onValueChange={(val) => setFormData({ ...formData, timezone: val })}
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select timezone" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="America/New_York">New York</SelectItem>
+                                <SelectItem value="America/Sao_Paulo">São Paulo</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
 
                     {/* STUDENTS MULTI-SELECT */}

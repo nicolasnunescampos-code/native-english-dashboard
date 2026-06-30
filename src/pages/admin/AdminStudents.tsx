@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { Pencil, Trash2 } from "lucide-react"
+import { Pencil, Trash2, History } from "lucide-react"
 
 interface Student {
   id: string
@@ -147,12 +147,12 @@ const AdminStudents: React.FC = () => {
       // 1. Create Auth User & Basic Record via Edge Function
       const { error } = await supabase.functions.invoke("create-student", {
         body: {
-          email: form.email.toLowerCase(),
+          email: form.email.trim().toLowerCase(),
           password: form.password,
-          student_name: form.student_name,
+          student_name: form.student_name.trim(),
           classes_per_week: form.classes_per_week,
-          cpf: form.cpf || null,
-          payment_amount: form.payment_amount || null,
+          cpf: form.cpf ? form.cpf.trim() : null,
+          payment_amount: form.payment_amount ? form.payment_amount.trim() : null,
           course_type: form.course_type,
         },
       })
@@ -176,7 +176,7 @@ const AdminStudents: React.FC = () => {
       const { data: newStudent } = await supabase
         .from('students')
         .select('id')
-        .eq('email', form.email.toLowerCase())
+        .eq('email', form.email.trim().toLowerCase())
         .single()
 
       if (newStudent) {
@@ -425,6 +425,15 @@ const AdminStudents: React.FC = () => {
                 >
                   <Pencil className="w-4 h-4 mr-2" />
                   Edit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => window.open(`/admin/student-history?student=${encodeURIComponent(student.student_name)}`, '_blank')}
+                >
+                  <History className="w-4 h-4 mr-2" />
+                  History
                 </Button>
                 <Button
                   variant="destructive"

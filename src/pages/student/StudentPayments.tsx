@@ -12,11 +12,14 @@ const StudentPayments: React.FC = () => {
   const [currentPayment, setCurrentPayment] = useState<Payment | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(amount);
+  const formatCurrency = (amount: number, currency: string = 'BRL') =>
+    new Intl.NumberFormat(
+      currency === 'BRL' ? 'pt-BR' : currency === 'EUR' ? 'de-DE' : 'en-US',
+      {
+        style: 'currency',
+        currency: currency,
+      }
+    ).format(amount);
 
   const isSameMonth = (date: string) => {
     if (!date) return false;
@@ -30,6 +33,15 @@ const StudentPayments: React.FC = () => {
       if (!studentName) return;
 
       try {
+        // Fetch student profile to get their preferred currency
+        const { data: studentData, error: studentError } = await supabase
+          .from('students')
+          .select('currency')
+          .eq('student_name', studentName)
+          .single();
+
+        const studentCurrency = studentData?.currency || 'BRL';
+
         const { data, error } = await supabase
           .from('payments')
           .select('*')
@@ -44,6 +56,15 @@ const StudentPayments: React.FC = () => {
         if (currentMonthPayments.length > 0) {
           current = currentMonthPayments.find(p => p.status === 'paid') || currentMonthPayments[0];
         }
+
+        // Override the payment's currency with the student's preferred currency if it's missing or BRL
+        // This handles older payments that were created with BRL by default
+        if (current) {
+          if (!current.currency || current.currency === 'BRL') {
+            current.currency = studentCurrency;
+          }
+        }
+
         setCurrentPayment(current);
       } catch (err) {
         console.error('Error loading payment:', err);
@@ -76,7 +97,7 @@ const StudentPayments: React.FC = () => {
                 </p>
 
                 <p className="text-xl font-semibold">
-                  {formatCurrency(currentPayment.amount)}
+                  {formatCurrency(currentPayment.amount, currentPayment.currency)}
                 </p>
               </div>
 
@@ -106,6 +127,23 @@ const StudentPayments: React.FC = () => {
           ) : (
             <p className="text-muted-foreground">No payment for this month</p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">📄 Payment Instructions</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="bg-muted p-4 rounded-lg">
+            <p className="text-sm font-medium text-muted-foreground">For payments done by PIX, here is the key:</p>
+            <p className="text-lg font-bold mt-1 text-foreground">42288104/0001-93</p>
+          </div>
+          <div className="bg-muted p-4 rounded-lg">
+            <p className="text-sm text-muted-foreground">
+              For payments done by credit card, please contact our administration.
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>

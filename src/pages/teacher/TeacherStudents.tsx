@@ -3,6 +3,7 @@ import { supabase, Class } from '@/lib/supabase';
 import { Card, CardContent } from '@/components/ui/card';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
 
 /* ---------------------------------------------
    Types
@@ -51,33 +52,24 @@ export default function TeacherStudents() {
       return;
     }
 
-    // 1. Fetch Teacher ID
-    const { data: teacherData } = await supabase
-        .from('teachers')
-        .select('id')
-        .eq('name', teacherName)
-        .maybeSingle();
-
-    const teacherId = teacherData?.id;
-
-    // 2. Relational approach (Skipped to prevent 400 errors)
-    let relationalNames: string[] = [];
-
-    // 3. Legacy approach
-    let legacyNames: string[] = [];
-    const { data: legacyClasses } = await supabase
-        .from('classes')
+    // Fetch all active students directly from the students table
+    const { data: activeStudents, error } = await supabase
+        .from('students')
         .select('student_name')
-        .ilike('title', `%${teacherName}%`);
+        .eq('status', 'active');
 
-    if (legacyClasses) {
-        legacyNames = legacyClasses.map((c: any) => c.student_name).filter(Boolean);
+    if (error) {
+      console.error('Error fetching students:', error);
+      setStudents([]);
+    } else {
+      // Extract names and sort alphabetically
+      const studentsList = (activeStudents || [])
+        .map((s: any) => ({ student_name: s.student_name }))
+        .sort((a, b) => a.student_name.localeCompare(b.student_name));
+      
+      setStudents(studentsList);
     }
 
-    const uniqueNames = Array.from(new Set([...relationalNames, ...legacyNames]));
-    const studentsList = uniqueNames.map(name => ({ student_name: name })).sort((a,b) => a.student_name.localeCompare(b.student_name));
-    
-    setStudents(studentsList);
     setLoading(false);
   }
 

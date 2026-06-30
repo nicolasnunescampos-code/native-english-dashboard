@@ -37,6 +37,7 @@ export interface Class {
   time: string; // Keep for backward compat or display
   start_time?: string; // New
   end_time?: string;   // New
+  timezone?: string; // New
   teacher_id?: string; // New FK
   status?: 'draft' | 'published'; // New
   event_id?: string; // For recurrence grouping
@@ -74,6 +75,7 @@ export interface Material {
   level: string;
   url: string;
   description?: string | null;
+  thumbnail_url?: string;
   target_audience?: string; // 'student', 'teacher', 'both'
 }
 
@@ -119,3 +121,35 @@ export interface RecuperationClass {
   notes: string;
   created_at?: string;
 }
+
+export interface Exam {
+  id: string;
+  title: string;
+  chapter_number: number;
+  level: string;
+  created_at?: string;
+}
+
+export interface Question {
+  id: string;
+  exam_id: string;
+  topic?: string;
+  question_text: string;
+  type: 'fill-in-the-blank' | 'multiple-choice';
+  correct_answer: string;
+  points: number;
+  created_at?: string;
+}
+
+export interface ExamSubmission {
+  id: string;
+  student_id: string;
+  exam_id: string;
+  score: number | null;
+  answers_json: any | null;
+  assigned_by?: string;
+  completed_at: string | null;
+  created_at?: string;
+  exams?: Exam; // For joined queries
+}
+

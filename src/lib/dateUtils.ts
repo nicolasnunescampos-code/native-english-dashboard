@@ -1,46 +1,47 @@
 import { format } from "date-fns";
+import { fromZonedTime } from "date-fns-tz";
 
 /**
- * Base Time Zone for the school (Brasília Time)
- * We assume all times in the database are stored relative to this zone.
- * Offset is -03:00.
+ * Base Time Zone for the school (Brasilia Time)
+ * We assume all times in the database are scheduled relative to this zone.
+ * Using IANA time zone handles Daylight Saving Time automatically.
  */
-const SCHOOL_TZ_OFFSET = "-03:00";
+const SCHOOL_TZ = "America/Sao_Paulo";
 
 /**
- * Formats a Class Date and Time from the database (School Time) to the User's Local Time.
+ * Converts School Date/Time to User's Local Date object.
+ */
+export const toLocalDate = (dateStr: string, timeStr: string | undefined | null, sourceTz: string = SCHOOL_TZ): Date => {
+  if (!timeStr) return new Date(dateStr); // Fallback
+  
+  // Format: "YYYY-MM-DD HH:mm:00"
+  const dateStringWithTime = `${dateStr} ${timeStr}:00`;
+  
+  // Interprets the date string as being in the provided source timezone, 
+  // and returns a standard Date object representing that exact moment in UTC/Local.
+  return fromZonedTime(dateStringWithTime, sourceTz);
+};
+
+/**
+ * Formats a Class Date and Time from the database to the User's Local Time.
  * 
  * @param dateStr YYYY-MM-DD
  * @param timeStr HH:mm
- * @returns Formatted string e.g. "14:00" or "Feb 10, 14:00" if date changes.
+ * @param sourceTz Original timezone of the class (defaults to SCHOOL_TZ)
+ * @returns Formatted string e.g. "14:00"
  */
-export const formatClassTime = (dateStr: string, timeStr: string | undefined | null): string => {
+export const formatClassTime = (dateStr: string, timeStr: string | undefined | null, sourceTz: string = SCHOOL_TZ): string => {
   if (!timeStr) return "TBA";
 
   try {
-    // 1. Construct an ISO string with the fixed School Offset
-    // format: YYYY-MM-DDTHH:mm:00-03:00
-    const isoString = `${dateStr}T${timeStr}:00${SCHOOL_TZ_OFFSET}`;
-    
-    // 2. Create a Date object (Browser automatically converts to Local Time)
-    const localDate = new Date(isoString);
+    const localDate = toLocalDate(dateStr, timeStr, sourceTz);
 
-    // 3. Format strictly the time part in local time
-    // We utilize date-fns format, which works on the local date object
+    // Format strictly the time part in local time
     return format(localDate, "HH:mm");
   } catch (error) {
     console.error("Error formatting time:", error);
     return timeStr; // Fallback to original string
   }
-};
-
-/**
- * Converts School Date/Time to User's Local Date object.
- */
-export const toLocalDate = (dateStr: string, timeStr: string | undefined | null): Date => {
-  if (!timeStr) return new Date(dateStr); // Fallback
-  const isoString = `${dateStr}T${timeStr}:00${SCHOOL_TZ_OFFSET}`;
-  return new Date(isoString);
 };
 
 /**

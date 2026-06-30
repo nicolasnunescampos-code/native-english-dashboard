@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase, Material } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { Trash2, Plus, Pencil, ExternalLink } from 'lucide-react';
+import { Trash2, Plus, Pencil, ExternalLink, Upload } from 'lucide-react';
 import {
     Dialog,
     DialogContent,
@@ -27,7 +27,31 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 
-const CATEGORIES = ['Business', 'Grammar', 'Entertainment', 'Club'];
+const CATEGORIES = ['Grammar', 'Entertainment', 'Club', 'Business'];
+
+const getDriveId = (url: string) => {
+    if (!url) return null;
+    const regExp = /\/d\/([a-zA-Z0-9_-]+)|\?id=([a-zA-Z0-9_-]+)/;
+    const match = url.match(regExp);
+    return match ? (match[1] || match[2]) : null;
+};
+
+const getThumbnailSrc = (url: string, materialUrl: string) => {
+    // If a specific thumbnail URL is provided, try to use it
+    if (url) {
+        const driveId = getDriveId(url);
+        if (driveId) {
+            return `https://drive.google.com/uc?export=view&id=${driveId}`;
+        }
+        return url;
+    }
+    // Fallback: try to generate a thumbnail from the material's main URL if it's a Drive link
+    const matDriveId = getDriveId(materialUrl);
+    if (matDriveId) {
+        return `https://drive.google.com/thumbnail?id=${matDriveId}&sz=w600-h400`; // Google Drive thumbnail API
+    }
+    return '';
+};
 
 const AdminMaterials: React.FC = () => {
     const [materials, setMaterials] = useState<Material[]>([]);
@@ -40,7 +64,9 @@ const AdminMaterials: React.FC = () => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [url, setUrl] = useState('');
-    const [category, setCategory] = useState('Business');
+    const [thumbnailUrl, setThumbnailUrl] = useState('');
+    const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+    const [category, setCategory] = useState('Grammar');
     const [level, setLevel] = useState('');
     const [targetAudience, setTargetAudience] = useState('both');
 
@@ -68,7 +94,9 @@ const AdminMaterials: React.FC = () => {
         setTitle('');
         setDescription('');
         setUrl('');
-        setCategory('Business');
+        setThumbnailUrl('');
+        setThumbnailFile(null);
+        setCategory('Grammar');
         setLevel('');
         setTargetAudience('both');
         setEditingMaterial(null);
@@ -84,7 +112,9 @@ const AdminMaterials: React.FC = () => {
         setTitle(material.title);
         setDescription(material.description || '');
         setUrl(material.url);
-        setCategory(material.category || 'Business');
+        setThumbnailUrl(material.thumbnail_url || '');
+        setThumbnailFile(null);
+        setCategory(material.category || 'Grammar');
         setLevel(material.level || '');
         setTargetAudience(material.target_audience || 'both');
         setIsDialogOpen(true);
@@ -95,10 +125,32 @@ const AdminMaterials: React.FC = () => {
         setSaving(true);
 
         try {
+            let finalThumbnailUrl = thumbnailUrl;
+
+            if (thumbnailFile) {
+                const fileExt = thumbnailFile.name.split('.').pop();
+                const cleanName = thumbnailFile.name.replace(/[^a-zA-Z0-9]/g, '_');
+                const fileName = `${Date.now()}_${cleanName}.${fileExt}`;
+                const filePath = `${fileName}`;
+
+                const { error: uploadError } = await supabase.storage
+                    .from('thumbnails')
+                    .upload(filePath, thumbnailFile);
+
+                if (uploadError) throw uploadError;
+
+                const { data } = supabase.storage
+                    .from('thumbnails')
+                    .getPublicUrl(filePath);
+
+                finalThumbnailUrl = data.publicUrl;
+            }
+
             const materialData = {
                 title,
                 description,
                 url,
+                thumbnail_url: finalThumbnailUrl,
                 category,
                 level,
                 target_audience: targetAudience,
@@ -125,6 +177,12 @@ const AdminMaterials: React.FC = () => {
             toast.error('Failed to save material');
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            setThumbnailFile(e.target.files[0]);
         }
     };
 
@@ -233,6 +291,37 @@ const AdminMaterials: React.FC = () => {
                             </div>
 
                             <div className="space-y-2">
+                                <Label htmlFor="thumbnail-file">Thumbnail Image (Optional)</Label>
+                                <div className="space-y-2">
+                                    <Input
+                                        id="thumbnail-file"
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleFileChange}
+                                        className="cursor-pointer"
+                                    />
+                                    {thumbnailUrl && !thumbnailFile && (
+                                        <div className="text-xs text-muted-foreground flex items-center gap-2">
+                                            <span>Current image:</span>
+                                            <a
+                                                href={thumbnailUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-blue-500 hover:underline flex items-center gap-1"
+                                            >
+                                                View <ExternalLink className="h-3 w-3" />
+                                            </a>
+                                        </div>
+                                    )}
+                                    {thumbnailFile && (
+                                        <div className="text-xs text-green-600 font-medium">
+                                            New image selected: {thumbnailFile.name}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
                                 <Label htmlFor="description">Description</Label>
                                 <Textarea
                                     id="description"
@@ -276,65 +365,75 @@ const AdminMaterials: React.FC = () => {
                         <TabsContent key={cat} value={cat}>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {materials
-                                    .filter(material => (material.category || 'Business').toLowerCase() === cat.toLowerCase())
+                                    .filter(material => (material.category || 'Grammar').toLowerCase() === cat.toLowerCase())
                                     .map((material) => (
-                                    <Card key={material.id} className="overflow-hidden hover:shadow-md transition-shadow">
-                                        <CardContent className="p-4 flex flex-col h-full space-y-3">
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <h3 className="font-semibold text-lg">{material.title}</h3>
-                                                    <div className="flex gap-2 items-center mt-1">
-                                                        <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary">
-                                                            {material.level}
-                                                        </span>
-                                                        <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-secondary/20 text-secondary-foreground capitalize">
-                                                            {material.target_audience || 'both'}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div className="flex gap-1 shrink-0">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleEdit(material)}
-                                                        className="h-8 w-8"
-                                                    >
-                                                        <Pencil className="h-4 w-4" />
-                                                    </Button>
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </Button>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>Delete Material?</AlertDialogTitle>
-                                                                <AlertDialogDescription>
-                                                                    Are you sure you want to delete "{material.title}"? This action cannot be undone.
-                                                                </AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                <AlertDialogAction
-                                                                    className="bg-destructive text-destructive-foreground"
-                                                                    onClick={() => handleDelete(material)}
-                                                                >
-                                                                    Delete
-                                                                </AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
+                                    <Card key={material.id} className="overflow-hidden hover:shadow-lg transition-all group flex flex-col h-full border-muted-foreground/20">
+                                        {/* Netflix style Thumbnail */}
+                                        <div className="w-full aspect-video bg-muted relative shrink-0 overflow-hidden">
+                                            <img
+                                                src={getThumbnailSrc(material.thumbnail_url || '', material.url)}
+                                                alt={material.title}
+                                                className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300 p-2"
+                                                onError={(e) => {
+                                                    (e.target as HTMLImageElement).src = 'https://placehold.co/600x400/2a2a2a/ffffff?text=Material';
+                                                }}
+                                            />
+                                            {/* Action overlays on hover */}
+                                            <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-background/80 backdrop-blur-sm rounded-md p-1 shadow-sm">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => handleEdit(material)}
+                                                    className="h-7 w-7"
+                                                >
+                                                    <Pencil className="h-3 w-3" />
+                                                </Button>
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10">
+                                                            <Trash2 className="h-3 w-3" />
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>Delete Material?</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                Are you sure you want to delete "{material.title}"? This action cannot be undone.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                            <AlertDialogAction
+                                                                className="bg-destructive text-destructive-foreground"
+                                                                onClick={() => handleDelete(material)}
+                                                            >
+                                                                Delete
+                                                            </AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </div>
+                                        </div>
+                                        <CardContent className="p-4 flex flex-col flex-1">
+                                            <div className="mb-2">
+                                                <h3 className="font-semibold text-lg leading-tight line-clamp-1">{material.title}</h3>
+                                                <div className="flex gap-2 items-center mt-2 flex-wrap">
+                                                    <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary">
+                                                        {material.level}
+                                                    </span>
+                                                    <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-secondary/30 text-secondary-foreground capitalize">
+                                                        {material.target_audience || 'both'}
+                                                    </span>
                                                 </div>
                                             </div>
                                             
                                             {material.description && (
-                                              <p className="text-sm text-muted-foreground flex-1">
+                                              <p className="text-sm text-muted-foreground line-clamp-2 mt-2 mb-4 flex-1">
                                                   {material.description}
                                               </p>
                                             )}
 
-                                            <Button asChild variant="secondary" className="w-full mt-auto">
+                                            <Button asChild variant="default" className="w-full mt-auto shadow-sm">
                                               <a
                                                 href={material.url}
                                                 target="_blank"
@@ -347,7 +446,7 @@ const AdminMaterials: React.FC = () => {
                                         </CardContent>
                                     </Card>
                                 ))}
-                                {materials.filter(m => (m.category || 'Business').toLowerCase() === cat.toLowerCase()).length === 0 && (
+                                {materials.filter(m => (m.category || 'Grammar').toLowerCase() === cat.toLowerCase()).length === 0 && (
                                     <div className="col-span-full">
                                         <p className="text-muted-foreground text-center py-6">No materials found in this category.</p>
                                     </div>

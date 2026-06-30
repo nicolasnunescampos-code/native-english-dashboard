@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { format, addDays, parseISO } from 'date-fns'
+import { fromZonedTime } from 'date-fns-tz'
 import { Check, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -46,12 +47,19 @@ import {
 } from "@/components/ui/popover"
 import { useToast } from '@/hooks/use-toast'
 
+const extractTeacherName = (title: string) => {
+  if (!title) return '';
+  const parts = title.split(' - ');
+  return parts.length > 1 ? parts[1].trim() : title;
+};
+
 type ClassRecord = {
   id: string
   student_name: string
   title: string
   date: string
   time: string
+  timezone?: string
   link_url: string | null
 }
 
@@ -70,16 +78,41 @@ export default function AdminClasses() {
 
   const [formDate, setFormDate] = useState('')
   const [formTime, setFormTime] = useState('')
+  const [formTimezone, setFormTimezone] = useState('America/Sao_Paulo')
   const [formTeacher, setFormTeacher] = useState('')
   const [formLink, setFormLink] = useState('')
 
-  const [addForm, setAddForm] = useState({
-    student_name: '',
-    title: '', // Teacher
+  const [addForm, setAddForm] = useState<{
+    student_names: string[];
+    teacher_name: string;
+    date: string;
+    time: string;
+    timezone: string;
+    link_url: string;
+  }>({
+    student_names: [],
+    teacher_name: '',
     date: '',
     time: '',
+    timezone: 'America/Sao_Paulo',
     link_url: ''
   })
+
+  // Generate 30-min interval times with AM/PM
+  const timeOptions = React.useMemo(() => {
+    const options = []
+    for (let h = 0; h < 24; h++) {
+      for (const m of ['00', '30']) {
+        const isPM = h >= 12
+        const displayH = h % 12 === 0 ? 12 : h % 12
+        const ampm = isPM ? 'PM' : 'AM'
+        const value = `${h.toString().padStart(2, '0')}:${m}`
+        const label = `${displayH}:${m} ${ampm}`
+        options.push({ label, value })
+      }
+    }
+    return options
+  }, [])
 
   // ─────────────────────────────────────────────
   // LOAD CLASSES (NEXT 7 DAYS)
@@ -92,7 +125,7 @@ export default function AdminClasses() {
 
     const { data, error } = await supabase
       .from('classes')
-      .select('id, student_name, title, date, time, link_url')
+      .select('id, student_name, title, date, time, timezone, link_url')
       .gte('date', today)
       .lte('date', nextWeek)
       .order('date', { ascending: true })
@@ -138,8 +171,16 @@ export default function AdminClasses() {
 
     for (const cls of classes) {
       // cls.date is usually YYYY-MM-DD
-      const [y, m, d] = cls.date.split("-").map(Number)
-      const dateObj = new Date(y, m - 1, d)
+      let dateObj = new Date(cls.date + 'T00:00:00')
+      if (cls.timezone && cls.time) {
+        try {
+          dateObj = fromZonedTime(`${cls.date} ${cls.time}:00`, cls.timezone)
+        } catch(e) {}
+      } else {
+        const [y, m, d] = cls.date.split("-").map(Number)
+        dateObj = new Date(y, m - 1, d)
+      }
+
       const weekday = dateObj.toLocaleDateString("en-US", {
         weekday: "long",
       })
@@ -201,7 +242,8 @@ export default function AdminClasses() {
     setSelected(cls)
     setFormDate(cls.date)
     setFormTime(cls.time)
-    setFormTeacher(cls.title)
+    setFormTimezone(cls.timezone || 'America/Sao_Paulo')
+    setFormTeacher(extractTeacherName(cls.title))
     setFormLink(cls.link_url || '')
     setOpen(true)
   }
@@ -217,7 +259,8 @@ export default function AdminClasses() {
       .update({
         date: formDate,
         time: formTime,
-        title: formTeacher,
+        timezone: formTimezone,
+        title: `${selected.student_name}'s class - ${formTeacher}`,
         link_url: formLink,
       })
       .eq('id', selected.id)
@@ -231,7 +274,7 @@ export default function AdminClasses() {
   // CREATE NEW CLASS
   // ─────────────────────────────────────────────
   const saveNewClass = async () => {
-    if (!addForm.student_name || !addForm.date || !addForm.time || !addForm.title) {
+    if (addForm.student_names.length === 0 || !addForm.date || !addForm.time || !addForm.teacher_name) {
       toast({
         title: "Missing fields",
         description: "Please fill in all required fields.",
@@ -245,10 +288,11 @@ export default function AdminClasses() {
     const { error } = await supabase
       .from('classes')
       .insert({
-        student_name: addForm.student_name,
-        title: addForm.title,
+        student_name: addForm.student_names.join(', '),
+        title: `${addForm.student_names.join(', ')}'s class - ${addForm.teacher_name}`,
         date: addForm.date,
         time: addForm.time,
+        timezone: addForm.timezone,
         link_url: addForm.link_url || null,
         class_level: 'Beginner', // Default required by schema
         status: 'published', // Always publish immediately
@@ -271,7 +315,7 @@ export default function AdminClasses() {
     })
 
     setOpenAdd(false)
-    setAddForm({ student_name: '', title: '', date: '', time: '', link_url: '' })
+    setAddForm({ student_names: [], teacher_name: '', date: '', time: '', timezone: 'America/Sao_Paulo', link_url: '' })
     loadClasses()
   }
 
@@ -313,14 +357,24 @@ export default function AdminClasses() {
                   </TableHeader>
 
                   <TableBody>
-                    {dayClasses.map((cls) => (
+                    {dayClasses.map((cls) => {
+                      let displayDate = format(parseISO(cls.date), 'dd/MM/yyyy')
+                      let displayTime = cls.time
+                      
+                      if (cls.timezone) {
+                        try {
+                          const utcDate = fromZonedTime(`${cls.date} ${cls.time}:00`, cls.timezone)
+                          displayDate = format(utcDate, 'dd/MM/yyyy')
+                          displayTime = format(utcDate, 'HH:mm')
+                        } catch(e) {}
+                      }
+
+                      return (
                       <TableRow key={cls.id}>
                         <TableCell>{cls.student_name}</TableCell>
                         <TableCell>{cls.title}</TableCell>
-                        <TableCell>
-                          {format(parseISO(cls.date), 'dd/MM/yyyy')}
-                        </TableCell>
-                        <TableCell>{cls.time}</TableCell>
+                        <TableCell>{displayDate}</TableCell>
+                        <TableCell>{displayTime}</TableCell>
                         <TableCell>
                           {cls.link_url ? (
                             <a
@@ -344,7 +398,7 @@ export default function AdminClasses() {
                           </Button>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )})}
                   </TableBody>
                 </Table>
               </div>
@@ -372,11 +426,37 @@ export default function AdminClasses() {
 
             <div>
               <Label>Time</Label>
-              <Input
-                type="time"
+              <Select
                 value={formTime}
-                onChange={(e) => setFormTime(e.target.value)}
-              />
+                onValueChange={(val) => setFormTime(val)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select time" />
+                </SelectTrigger>
+                <SelectContent>
+                  {timeOptions.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Timezone</Label>
+              <Select
+                value={formTimezone}
+                onValueChange={(val) => setFormTimezone(val)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select timezone" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="America/New_York">New York</SelectItem>
+                  <SelectItem value="America/Sao_Paulo">São Paulo</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
@@ -443,11 +523,11 @@ export default function AdminClasses() {
                     variant="outline"
                     role="combobox"
                     aria-expanded={openStudentPopover}
-                    className="w-full justify-between font-normal"
+                    className="w-full justify-between font-normal h-auto min-h-[40px] whitespace-normal text-left"
                   >
-                    {addForm.student_name
-                      ? students.find((student) => student.name === addForm.student_name)?.name
-                      : "Select a student"}
+                    {addForm.student_names.length > 0
+                      ? addForm.student_names.join(', ')
+                      : "Select students..."}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
@@ -457,24 +537,34 @@ export default function AdminClasses() {
                     <CommandList>
                       <CommandEmpty>No student found.</CommandEmpty>
                       <CommandGroup>
-                        {students.map((student) => (
-                          <CommandItem
-                            key={student.id}
-                            value={student.name}
-                            onSelect={() => {
-                              setAddForm({ ...addForm, student_name: student.name })
-                              setOpenStudentPopover(false)
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                addForm.student_name === student.name ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            {student.name}
-                          </CommandItem>
-                        ))}
+                        {students.map((student) => {
+                          const isSelected = addForm.student_names.includes(student.name);
+                          return (
+                            <CommandItem
+                              key={student.id}
+                              value={student.name}
+                              onSelect={() => {
+                                setAddForm(prev => {
+                                  if (isSelected) {
+                                    return { ...prev, student_names: prev.student_names.filter(n => n !== student.name) };
+                                  } else {
+                                    return { ...prev, student_names: [...prev.student_names, student.name] };
+                                  }
+                                });
+                              }}
+                            >
+                              <div className={cn(
+                                "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                                isSelected
+                                  ? "bg-primary text-primary-foreground"
+                                  : "opacity-50 [&_svg]:invisible"
+                              )}>
+                                <Check className="h-3 w-3" />
+                              </div>
+                              {student.name}
+                            </CommandItem>
+                          );
+                        })}
                       </CommandGroup>
                     </CommandList>
                   </Command>
@@ -485,12 +575,12 @@ export default function AdminClasses() {
             <div>
               <Label>Teacher</Label>
               <Select
-                value={addForm.title}
+                value={addForm.teacher_name}
                 onValueChange={(val) => {
                   const teacher = teachers.find(t => t.name === val);
                   setAddForm({ 
                     ...addForm, 
-                    title: val, 
+                    teacher_name: val, 
                     link_url: teacher?.meet_link || addForm.link_url 
                   });
                 }}
@@ -520,11 +610,37 @@ export default function AdminClasses() {
 
               <div>
                 <Label>Time</Label>
-                <Input
-                  type="time"
+                <Select
                   value={addForm.time}
-                  onChange={(e) => setAddForm({ ...addForm, time: e.target.value })}
-                />
+                  onValueChange={(val) => setAddForm({ ...addForm, time: val })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select time" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {timeOptions.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>
+                        {t.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Timezone</Label>
+                <Select
+                  value={addForm.timezone}
+                  onValueChange={(val) => setAddForm({ ...addForm, timezone: val })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select timezone" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="America/New_York">New York</SelectItem>
+                    <SelectItem value="America/Sao_Paulo">São Paulo</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

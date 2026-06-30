@@ -27,6 +27,7 @@ import {
   RotateCcw,
   LayoutDashboard,
   TrendingUp,
+  GraduationCap,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ModeToggle } from '@/components/mode-toggle'
@@ -41,6 +42,7 @@ interface NavItem {
 const studentNavItems: NavItem[] = [
   { label: 'Home', path: '/student', icon: <Home className="h-5 w-5" /> },
   { label: 'Classes', path: '/student/classes', icon: <Calendar className="h-5 w-5" /> },
+  { label: 'Exams', path: '/student/exams', icon: <GraduationCap className="h-5 w-5" /> },
   { label: 'Materials', path: '/student/materials', icon: <BookOpen className="h-5 w-5" /> },
   { label: 'History', path: '/student/history', icon: <History className="h-5 w-5" /> },
   { label: 'Reports', path: '/student/reports', icon: <FileText className="h-5 w-5" /> },
@@ -56,6 +58,7 @@ const studentNavItems: NavItem[] = [
 const teacherNavItems: NavItem[] = [
   { label: 'Home', path: '/teacher', icon: <Home className="h-5 w-5" /> },
   { label: 'Weekly Schedule', path: '/teacher/schedule', icon: <Calendar className="h-5 w-5" /> },
+  { label: 'Calendar', path: '/teacher/calendar', icon: <Calendar className="h-5 w-5" /> },
   // { label: 'Grade Classes', path: '/teacher/grade', icon: <Edit className="h-5 w-5" /> },
   { label: 'Students', path: '/teacher/students', icon: <Users className="h-5 w-5" /> },
   { label: 'Materials', path: '/teacher/materials', icon: <BookOpen className="h-5 w-5" /> },
@@ -67,12 +70,21 @@ const teacherNavItems: NavItem[] = [
 const adminNavItems: NavItem[] = [
   { label: 'Dashboard', path: '/admin', icon: <LayoutDashboard className="h-5 w-5" /> },
   { label: 'Payments', path: '/admin/payments', icon: <CreditCard className="h-5 w-5" /> },
-  { label: 'Classes', path: '/admin/classes', icon: <ScrollText className="h-5 w-5" /> },
-  { label: 'Grades', path: '/admin/grades', icon: <Edit className="h-5 w-5" /> },
+  {
+    label: 'Classes',
+    path: '#classes',
+    icon: <ScrollText className="h-5 w-5" />,
+    subItems: [
+      { label: 'All Classes', path: '/admin/classes', icon: <Calendar className="h-5 w-5" /> },
+      { label: 'Calendar View', path: '/admin/calendar', icon: <Calendar className="h-5 w-5" /> },
+      { label: 'Grades', path: '/admin/grades', icon: <Edit className="h-5 w-5" /> },
+      { label: 'Recuperations', path: '/admin/recuperations', icon: <RotateCcw className="h-5 w-5" /> },
+      { label: 'Exams', path: '/admin/exams', icon: <GraduationCap className="h-5 w-5" /> },
+    ]
+  },
   { label: 'Leads', path: '/admin/leads', icon: <TrendingUp className="h-5 w-5" /> },
   { label: 'Announcements', path: '/admin/announcements', icon: <Megaphone className="h-5 w-5" /> },
   { label: 'Messages', path: '/admin/messages', icon: <MessageSquare className="h-5 w-5" /> },
-  { label: 'Recuperations', path: '/admin/recuperations', icon: <RotateCcw className="h-5 w-5" /> },
   { label: 'Rules', path: '/admin/rules', icon: <ScrollText className="h-5 w-5" /> },
   {
     label: 'Media',
@@ -112,6 +124,7 @@ export const Sidebar: React.FC = () => {
   const [totalUnread, setTotalUnread] = useState(0)
   const [pendingReportsCount, setPendingReportsCount] = useState(0)
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+    Classes: false,
     Users: false,
     Media: false,
     Tracking: false,
@@ -316,8 +329,8 @@ export const Sidebar: React.FC = () => {
         </ul>
       </nav>
 
-      {/* Logout – DESKTOP ONLY */}
-      <div className="hidden md:block p-4 border-t border-border">
+      {/* Logout */}
+      <div className="p-4 border-t border-border shrink-0">
         <div className="mb-3">
           <p className="text-sm font-medium truncate">{displayName}</p>
           <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
@@ -355,10 +368,10 @@ export const Sidebar: React.FC = () => {
           onClick={() => setOpen(false)}
         >
           <aside
-            className="absolute left-0 top-0 h-full w-64 bg-card"
+            className="absolute left-0 top-0 h-full w-64 bg-card flex flex-col"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex justify-end p-2">
+            <div className="flex justify-end p-2 shrink-0">
               <Button variant="ghost" size="icon" onClick={() => setOpen(false)}>
                 <X />
               </Button>

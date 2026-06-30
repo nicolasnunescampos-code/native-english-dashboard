@@ -3,6 +3,7 @@ import { Calendar, dateFnsLocalizer, Event as CalendarEvent, View } from 'react-
 import withDragAndDrop from 'react-big-calendar/lib/addons/dragAndDrop';
 import { format, parse, startOfWeek, endOfWeek, getDay, addWeeks } from 'date-fns';
 import { enUS } from 'date-fns/locale';
+import { fromZonedTime, formatInTimeZone } from 'date-fns-tz';
 import { supabase, Class, Teacher, Student } from '@/lib/supabase';
 import { ClassModal, ClassFormData } from '@/components/calendar/ClassModal';
 import { Button } from '@/components/ui/button';
@@ -33,12 +34,15 @@ import { EventProps } from 'react-big-calendar';
 
 const CustomEvent = ({ event }: EventProps<CalendarClassEvent>) => {
     return (
-        <div className="h-full w-full flex flex-col justify-start overflow-hidden">
-            <div className="font-semibold text-xs leading-tight mb-0.5">
+        <div 
+            className="h-full w-full flex flex-col justify-start overflow-hidden p-0.5" 
+            title={`${event.title}\n${format(event.start!, 'h:mm a')} - ${format(event.end!, 'h:mm a')}`}
+        >
+            <div className="font-semibold text-[9px] sm:text-[10px] leading-[1.1] line-clamp-3 break-words">
                 {event.title}
             </div>
-            <div className="text-[10px] opacity-90 leading-tight">
-                {format(event.start!, 'h:mm a')} - {format(event.end!, 'h:mm a')}
+            <div className="text-[8px] sm:text-[9px] opacity-90 leading-none mt-0.5 truncate">
+                {format(event.start!, 'h:mm a')}
             </div>
         </div>
     );
@@ -97,7 +101,7 @@ const AdminCalendar: React.FC = () => {
             .gte('date', startDateStr)
             .lte('date', endDateStr)
             .order('date', { ascending: true })
-            .order('start_time', { ascending: true });
+            .order('time', { ascending: true });
 
         if (error) {
             toast({ title: 'Error loading classes', description: error.message, variant: 'destructive' });
@@ -107,55 +111,47 @@ const AdminCalendar: React.FC = () => {
 
         if (data) {
             // console.log('AdminCalendar: raw data', data);
-            const formattedEvents: CalendarClassEvent[] = data.map((cls: any) => {
-                // Construct Start/End dates from date + time columns
-                // Assuming cls.date is 'YYYY-MM-DD' and cls.time/start_time is 'HH:MM'
-                // If start_time exists, use it. Fallback to 'time' (legacy)
-
+            const rawEvents: CalendarClassEvent[] = data.map((cls: any) => {
                 const dateStr = cls.date;
                 const startTimeStr = cls.start_time || cls.time || '10:00';
-                const endTimeStr = cls.end_time || '11:00'; // Default duration if missing
+                const timeZone = cls.timezone || 'America/Sao_Paulo';
 
-                let start, end;
-
-                // Check if start_time is a full ISO timestamp (contains T)
-                if (startTimeStr.includes('T')) {
-                    start = new Date(startTimeStr);
-                } else {
-                    // Legacy: use date + time string
-                    start = new Date(`${dateStr}T${startTimeStr}`);
+                let start;
+                try {
+                    const timePart = startTimeStr.includes('T') ? startTimeStr.split('T')[1].substring(0, 5) : startTimeStr;
+                    start = fromZonedTime(`${dateStr} ${timePart}:00`, timeZone);
+                } catch(e) {
+                    if (startTimeStr.includes('T')) start = new Date(startTimeStr);
+                    else start = new Date(`${dateStr}T${startTimeStr}`);
                 }
 
-                // Check if end_time is a full ISO timestamp (contains T)
-                if (endTimeStr && endTimeStr.includes('T')) {
-                    end = new Date(endTimeStr);
-                } else {
-                    // Legacy or fallback
-                    const t = endTimeStr || '11:00';
-                    end = new Date(`${dateStr}T${t}`);
+                let end;
+                try {
+                    if (cls.end_time) {
+                        const endPart = cls.end_time.includes('T') ? cls.end_time.split('T')[1].substring(0, 5) : cls.end_time;
+                        end = fromZonedTime(`${dateStr} ${endPart}:00`, timeZone);
+                    } else {
+                        end = new Date(start.getTime() + 50 * 60 * 1000);
+                    }
+                } catch(e) {
+                    if (cls.end_time && cls.end_time.includes('T')) end = new Date(cls.end_time);
+                    else if (cls.end_time) end = new Date(`${dateStr}T${cls.end_time}`);
+                    else end = new Date(start.getTime() + 50 * 60 * 1000);
                 }
 
-                // Safety: Valid dates check
                 if (isNaN(start.getTime())) start = new Date();
                 if (isNaN(end.getTime()) || end <= start) {
                     end = new Date(start.getTime() + 50 * 60 * 1000);
                 }
 
-                // console.log('Parsed event:', { title: cls.title, start, end });
-
-                // Find teacher for color
-                // Find teacher for color
-                // Use provided list or state
                 const currentTeachers = teachersList || teachers;
                 const teacher = currentTeachers.find(t => t.id === cls.teacher_id);
-                // Fallback color if using legacy data without teacher_id
                 let color = '#3788d8';
+                
                 if (teacher) {
                     color = teacher.color;
                 } else {
-                    // Try to match legacy title to teacher name if no ID
                     const tName = cls.title || '';
-                    // Case insensitive partial match for legacy titles like "Student's class - Teacher"
                     const t = currentTeachers.find(t => tName.toLowerCase().includes(t.name.toLowerCase()));
                     if (t) color = t.color;
                 }
@@ -166,13 +162,50 @@ const AdminCalendar: React.FC = () => {
                     end,
                     resource: {
                         ...cls,
-                        // attach color for styling
                         color,
+                        merged_ids: [cls.id]
                     },
                 };
             });
-            // console.log('AdminCalendar: events', formattedEvents);
-            setEvents(formattedEvents);
+
+            // Group events by event_id to merge legitimate group classes (but keep double bookings separate)
+            const grouped = new Map<string, CalendarClassEvent>();
+            rawEvents.forEach(evt => {
+                // If it has an event_id, use it. Otherwise, use its unique DB id so it doesn't merge with anything else.
+                const key = evt.resource.event_id || `unique-${evt.resource.id}`;
+                
+                if (grouped.has(key) && evt.resource.event_id) {
+                    const existing = grouped.get(key)!;
+                    
+                    const getStudentName = (title: string) => title.split("'s class")[0].trim();
+                    const name1 = getStudentName(existing.title);
+                    const name2 = getStudentName(evt.title);
+                    
+                    if (!name1.includes(name2) && !name2.includes(name1)) {
+                        const combinedName = `${name1} and ${name2}`;
+                        const suffix = existing.title.includes(' - ') ? ` - ${existing.title.split(' - ')[1]}` : '';
+                        existing.title = `${combinedName}'s class${suffix}`;
+                    }
+                    
+                    if (existing.resource.student_name && evt.resource.student_name && !existing.resource.student_name.includes(evt.resource.student_name)) {
+                        existing.resource.student_name = `${existing.resource.student_name}, ${evt.resource.student_name}`;
+                    }
+                    
+                    if (evt.resource.id) {
+                        if (!existing.resource.merged_ids) existing.resource.merged_ids = [existing.resource.id];
+                        existing.resource.merged_ids.push(evt.resource.id);
+                    }
+                    
+                    if ((evt.resource as any).class_assignments) {
+                        if (!(existing.resource as any).class_assignments) (existing.resource as any).class_assignments = [];
+                        (existing.resource as any).class_assignments = [...(existing.resource as any).class_assignments, ...(evt.resource as any).class_assignments];
+                    }
+                } else {
+                    grouped.set(key, { ...evt });
+                }
+            });
+
+            setEvents(Array.from(grouped.values()));
         }
         setLoading(false);
     };
@@ -245,6 +278,7 @@ const AdminCalendar: React.FC = () => {
             date: format(start, 'yyyy-MM-dd'),
             start_time: format(start, 'HH:mm'),
             end_time: format(end, 'HH:mm'),
+            timezone: 'America/Sao_Paulo',
             teacher_id: '',
             student_ids: [],
             status: 'draft',
@@ -270,14 +304,20 @@ const AdminCalendar: React.FC = () => {
         console.log('DEBUG: Final Parsing studentIds:', studentIds);
 
         // Parse time: handle ISO or legacy HH:mm
-        let startTime = cls.start_time || cls.time || '10:00';
-        if (startTime.includes('T')) {
-            startTime = format(new Date(startTime), 'HH:mm');
+        let startTime = cls.time || '10:00';
+        if (!cls.time && cls.start_time) {
+            startTime = cls.start_time.includes('T') ? cls.start_time.split('T')[1].substring(0, 5) : cls.start_time;
         }
 
-        let endTime = cls.end_time || '11:00';
-        if (endTime.includes('T')) {
-            endTime = format(new Date(endTime), 'HH:mm');
+        let endTime = '11:00';
+        if (cls.end_time) {
+            endTime = cls.end_time.includes('T') ? cls.end_time.split('T')[1].substring(0, 5) : cls.end_time;
+        } else {
+            // Default 50 mins from start time
+            try {
+                const s = new Date(`1970-01-01T${startTime}`);
+                endTime = format(new Date(s.getTime() + 50 * 60 * 1000), 'HH:mm');
+            } catch(e) {}
         }
 
         // Fallback: Legacy Teacher Matching
@@ -298,10 +338,12 @@ const AdminCalendar: React.FC = () => {
             date: cls.date,
             start_time: startTime,
             end_time: endTime,
+            timezone: cls.timezone || 'America/Sao_Paulo',
             teacher_id: teacherId,
             student_ids: studentIds,
             status: cls.status || 'published',
             event_id: cls.event_id, // Pass for recurrence logic
+            merged_ids: (cls as any).merged_ids || [cls.id],
         });
         setIsModalOpen(true);
     };
@@ -311,9 +353,9 @@ const AdminCalendar: React.FC = () => {
         const cls = (event as CalendarClassEvent).resource;
         if (!cls.id) return;
 
-        const newDate = format(start, 'yyyy-MM-dd');
-        const newStartTime = format(start, 'HH:mm');
-        const newEndTime = format(end, 'HH:mm');
+        const timeZone = cls.timezone || 'America/Sao_Paulo';
+        const newDate = formatInTimeZone(start, timeZone, 'yyyy-MM-dd');
+        const newStartTime = formatInTimeZone(start, timeZone, 'HH:mm');
 
         try {
             // Optimistic update
@@ -325,14 +367,15 @@ const AdminCalendar: React.FC = () => {
             });
             setEvents(updatedEvents);
 
+            const idsToUpdate = [cls.id]; // Only update the primary class to allow 'peeling off' accidental merges
+
             const { error } = await supabase
                 .from('classes')
                 .update({
                     date: newDate,
-                    start_time: start.toISOString(),
-                    end_time: end.toISOString(),
+                    time: newStartTime,
                 })
-                .eq('id', cls.id);
+                .in('id', idsToUpdate);
 
             if (error) throw error;
 
@@ -375,28 +418,29 @@ const AdminCalendar: React.FC = () => {
             console.log('handleSaveClass START', { formData });
 
             // Common payload generator
-            const createPayload = (dateStr: string) => ({
+            const createPayload = (dateStr: string, studentName: string) => ({
                 date: dateStr,
-                start_time: new Date(`${dateStr}T${formData.start_time}:00`).toISOString(),
-                end_time: new Date(`${dateStr}T${formData.end_time}:00`).toISOString(),
-                teacher_id: formData.teacher_id,
                 status: formData.status,
                 title: title,
-                student_name: formData.student_ids.length > 0
-                    ? students.filter(s => formData.student_ids.includes(s.id)).map(s => s.student_name).join(', ')
-                    : 'Multiple',
+                student_name: studentName,
                 time: formData.start_time,
+                timezone: formData.timezone,
                 link_url: link_url,
                 class_level: 'Mixed',
                 event_id: formData.event_id || `calc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, // Ensure event_id
             });
+
+            // Exact student names selected
+            const selectedStudentNames = formData.student_ids.length > 0
+                ? students.filter(s => formData.student_ids.includes(s.id)).map(s => s.student_name)
+                : ['Unknown Student'];
 
             // ─────────────────────────────────────────────────────────────
             // CASE 1: NEW CLASS (Possibly Recurring)
             // ─────────────────────────────────────────────────────────────
             if (!formData.id) {
                 const newEventId = `calc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                const classesToInsert = [];
+                const classesToInsert: any[] = [];
 
                 if (formData.is_recurring && formData.repeat_until) {
                     // Generate weekly dates
@@ -407,35 +451,46 @@ const AdminCalendar: React.FC = () => {
                     let count = 0;
                     while (currentDate <= endDate && count < 150) {
                         const dateStr = format(currentDate, 'yyyy-MM-dd');
-                        classesToInsert.push({
-                            ...createPayload(dateStr),
-                            event_id: newEventId // All share same ID
+                        selectedStudentNames.forEach(studentName => {
+                            classesToInsert.push({
+                                ...createPayload(dateStr, studentName),
+                                event_id: newEventId // All share same ID
+                            });
                         });
                         currentDate = addWeeks(currentDate, 1);
                         count++;
                     }
                 } else {
                     // Single insert
-                    classesToInsert.push({
-                        ...createPayload(formData.date),
-                        event_id: newEventId
+                    selectedStudentNames.forEach(studentName => {
+                        classesToInsert.push({
+                            ...createPayload(formData.date, studentName),
+                            event_id: newEventId
+                        });
                     });
                 }
 
-                // Insert Classes
-                const { data: insertedClasses, error } = await supabase.from('classes').insert(classesToInsert).select();
-                if (error) throw error;
+                // Insert Classes ONE BY ONE to prevent sequence duplication issues
+                const insertedClasses: any[] = [];
+                for (const payload of classesToInsert) {
+                    const { data: inserted, error } = await supabase.from('classes').insert(payload).select();
+                    if (error) throw error;
+                    if (inserted && inserted.length > 0) {
+                        insertedClasses.push(inserted[0]);
+                    }
+                }
 
                 // Insert Assignments for ALL created classes
-                if (formData.student_ids.length > 0 && insertedClasses) {
-                    const allAssignments = insertedClasses.flatMap(cls =>
-                        formData.student_ids.map(sid => ({
-                            class_id: cls.id,
-                            student_id: sid
-                        }))
-                    );
-                    const { error: assignError } = await supabase.from('class_assignments').insert(allAssignments);
-                    if (assignError) throw assignError;
+                if (formData.student_ids.length > 0 && insertedClasses.length > 0) {
+                    const allAssignments = insertedClasses.map((cls: any) => {
+                        const matchingStudent = students.find(s => s.student_name === cls.student_name);
+                        return matchingStudent ? { class_id: cls.id, student_id: matchingStudent.id } : null;
+                    }).filter(Boolean) as any[];
+                    
+                    if (allAssignments.length > 0) {
+                        const { error: assignError } = await supabase.from('class_assignments').insert(allAssignments);
+                        if (assignError) throw assignError;
+                    }
                 }
 
             }
@@ -443,9 +498,85 @@ const AdminCalendar: React.FC = () => {
             // CASE 2: EDIT EXISTING CLASS
             // ─────────────────────────────────────────────────────────────
             else {
-                const basePayload = createPayload(formData.date);
-                // Remove id from payload as we are updating or re-inserting
-                // But we need to handle specific logic based on edit_mode
+                // Helper to sync a group of students for a specific date and event ID
+                const syncGroupForDate = async (targetDate: string, targetEventId: string, specificIds?: number[]) => {
+                    let query = supabase.from('classes').select('id, student_name');
+                    
+                    if (specificIds && specificIds.length > 0) {
+                        query = query.in('id', specificIds);
+                    } else {
+                        query = query.eq('event_id', targetEventId).eq('date', targetDate);
+                    }
+                    
+                    const { data: existingRows } = await query;
+                    if (!existingRows || existingRows.length === 0) return;
+                    
+                    const toUpdate: any[] = [];
+                    const toDelete: any[] = [];
+                    const toAdd = [...selectedStudentNames];
+                    
+                    existingRows.forEach(row => {
+                         // Fallback for legacy comma-separated rows: split and take the first name
+                         const primaryName = row.student_name.split(',')[0].trim();
+                         // Check if this existing row's primary student is still selected
+                         const matchedIndex = toAdd.findIndex(name => name.toLowerCase() === primaryName.toLowerCase());
+                         if (matchedIndex !== -1) {
+                             const exactName = toAdd[matchedIndex];
+                             toUpdate.push({ id: row.id, student_name: exactName });
+                             toAdd.splice(matchedIndex, 1); // Remove from toAdd so we don't insert a duplicate
+                         } else {
+                             toDelete.push(row);
+                         }
+                    });
+                    
+                    // Delete removed students
+                    if (toDelete.length > 0) {
+                        const idsToDelete = toDelete.map(r => r.id);
+                        await supabase.from('class_assignments').delete().in('class_id', idsToDelete);
+                        await supabase.from('classes').delete().in('id', idsToDelete);
+                    }
+                    
+                    // Update kept students
+                    if (toUpdate.length > 0) {
+                        for (const row of toUpdate) {
+                            const { error } = await supabase.from('classes').update({
+                                date: targetDate,
+                                status: formData.status,
+                                title: title,
+                                student_name: row.student_name, // Normalize the name (removes commas if legacy)
+                                time: formData.start_time,
+                                timezone: formData.timezone,
+                                link_url: link_url,
+                                event_id: targetEventId
+                            }).eq('id', row.id);
+                            if (error) throw error;
+                        }
+                    }
+                    
+                    // Add new students ONE BY ONE to prevent sequence duplication issues
+                    if (toAdd.length > 0) {
+                        const newAssignments: any[] = [];
+                        for (const name of toAdd) {
+                            const payload = createPayload(targetDate, name);
+                            payload.event_id = targetEventId;
+                            
+                            const { data: inserted, error } = await supabase.from('classes').insert(payload).select();
+                            if (error) throw error;
+                            
+                            if (inserted && inserted.length > 0) {
+                                const cls = inserted[0];
+                                const matchingStudent = students.find(s => s.student_name === cls.student_name);
+                                if (matchingStudent) {
+                                    newAssignments.push({ class_id: cls.id, student_id: matchingStudent.id });
+                                }
+                            }
+                        }
+                        
+                        if (newAssignments.length > 0) {
+                            await supabase.from('class_assignments').insert(newAssignments);
+                        }
+                    }
+                };
 
                 if (formData.edit_mode === 'single') {
                     console.log('Edit mode: SINGLE');
@@ -456,124 +587,76 @@ const AdminCalendar: React.FC = () => {
                         const newEventId = `calc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
                         // 1. Update current class to be the start of the series
-                        const payload = { ...basePayload, event_id: newEventId };
-                        const { error } = await supabase.from('classes').update(payload).eq('id', formData.id);
-                        if (error) throw error;
-
-                        // Update assignments for current class
-                        await supabase.from('class_assignments').delete().eq('class_id', formData.id);
-                        if (formData.student_ids.length > 0) {
-                            const assignments = formData.student_ids.map(sid => ({ class_id: formData.id!, student_id: sid }));
-                            await supabase.from('class_assignments').insert(assignments);
-                        }
+                        await syncGroupForDate(formData.date, newEventId, formData.merged_ids);
 
                         // 2. Generate Future Classes
-                        const classesToInsert = [];
+                        const classesToInsert: any[] = [];
                         let currentDate = addWeeks(new Date(formData.date), 1); // Start next week
                         const endDate = new Date(formData.repeat_until);
                         let count = 0;
 
                         while (currentDate <= endDate && count < 150) {
                             const dateStr = format(currentDate, 'yyyy-MM-dd');
-                            classesToInsert.push({
-                                ...createPayload(dateStr),
-                                event_id: newEventId // Share the new Series ID
+                            selectedStudentNames.forEach(studentName => {
+                                classesToInsert.push({
+                                    ...createPayload(dateStr, studentName),
+                                    event_id: newEventId // Share the new Series ID
+                                });
                             });
                             currentDate = addWeeks(currentDate, 1);
                             count++;
                         }
 
                         if (classesToInsert.length > 0) {
-                            const { data: insertedClasses, error: insertError } = await supabase.from('classes').insert(classesToInsert).select();
-                            if (insertError) throw insertError;
+                            // Insert ONE BY ONE
+                            const insertedClasses: any[] = [];
+                            for (const payload of classesToInsert) {
+                                const { data: inserted, error: insertError } = await supabase.from('classes').insert(payload).select();
+                                if (insertError) throw insertError;
+                                if (inserted && inserted.length > 0) {
+                                    insertedClasses.push(inserted[0]);
+                                }
+                            }
 
-                            // Insert Assignments for new future classes
-                            if (formData.student_ids.length > 0 && insertedClasses) {
-                                const allAssignments = insertedClasses.flatMap(cls =>
-                                    formData.student_ids.map(sid => ({
-                                        class_id: cls.id,
-                                        student_id: sid
-                                    }))
-                                );
-                                await supabase.from('class_assignments').insert(allAssignments);
+                            if (formData.student_ids.length > 0 && insertedClasses.length > 0) {
+                                const allAssignments = insertedClasses.map((cls: any) => {
+                                    const matchingStudent = students.find(s => s.student_name === cls.student_name);
+                                    return matchingStudent ? { class_id: cls.id, student_id: matchingStudent.id } : null;
+                                }).filter(Boolean) as any[];
+                                if (allAssignments.length > 0) {
+                                    await supabase.from('class_assignments').insert(allAssignments);
+                                }
                             }
                         }
 
                     } else {
                         // Case 2b: Update Single Class Only (Standard)
-                        // IMPORTANT: Detach from series by giving it a NEW event_id (if it was part of one), 
-                        // or just keep it as single if it was already single.
-                        // To be safe and support "This event only" detachment:
-                        const payload = { ...basePayload, event_id: `calc-${Date.now()}-ex` };
-
-                        const { error } = await supabase.from('classes').update(payload).eq('id', formData.id);
-                        if (error) {
-                            console.error('Error updating single class:', error);
-                            throw error;
-                        }
-
-                        // Update assignments (clear and re-add)
-                        await supabase.from('class_assignments').delete().eq('class_id', formData.id);
-                        if (formData.student_ids.length > 0) {
-                            const assignments = formData.student_ids.map(sid => ({ class_id: formData.id!, student_id: sid }));
-                            const { error: assignError } = await supabase.from('class_assignments').insert(assignments);
-                            if (assignError) console.error('Error updating assignments:', assignError);
-                        }
+                        // Detach from series by giving it a NEW event_id
+                        const detachedEventId = `calc-${Date.now()}-ex`;
+                        await syncGroupForDate(formData.date, detachedEventId, formData.merged_ids);
                     }
 
                 } else if (formData.edit_mode === 'following') {
                     // Update this AND future events in same series
-                    // 1. Fetch all future IDs
                     const { data: futureClasses } = await supabase
                         .from('classes')
-                        .select('id, date')
+                        .select('date')
                         .eq('event_id', formData.event_id)
                         .gte('date', formData.date); // This includes today
 
                     if (futureClasses && futureClasses.length > 0) {
+                        const uniqueDates = Array.from(new Set(futureClasses.map(c => c.date)));
                         const newSeriesId = `calc-${Date.now()}-future`;
-                        const idsToUpdate = futureClasses.map(c => c.id);
-
-                        // We need to update time/details, BUT date must remain compatible?
-                        // If user changed DATE (e.g. moved Monday to Tuesday), we need to shift all future dates?
-                        // Complexity: Shifting dates is hard.
-                        // SIMPLIFICATION: We only apply TIME/TITLE/TEACHER changes to future events.
-                        // We do NOT shift dates for now (unless I calculate offsets).
-                        // Let's assume standard field update for now.
-
-                        // Apply updates
-                        const { error } = await supabase
-                            .from('classes')
-                            .update({
-                                start_time: basePayload.start_time, // This sets them all to the SAME timestamp? NO!
-                                // ISSUE: `start_time` contains the DATE. 
-                                // If I update all future rows with `basePayload.start_time`, they all move to TODAY.
-                                // I must NOT update the DATE part of start_time/end_time if I'm bulk updating.
-                                // Only update: title, teacher_id, status, class_level, notes.
-                                // Time update is complex.
-
-                                title: basePayload.title,
-                                teacher_id: basePayload.teacher_id,
-                                status: basePayload.status,
-                                student_name: basePayload.student_name,
-                                event_id: newSeriesId, // Detach to new series
-                                // If user changed time (e.g. 10am -> 11am), we ideally want to propagate that.
-                                // But without date-shifting logic, we can't easily.
-                                // For now: Only update metadata.
-                            })
-                            .in('id', idsToUpdate);
-
-                        if (error) throw error;
-
-                        // Bulk update assignments? 
-                        // It's hard to do bulk assignment update.
-                        // We'd need to delete assignments for all these IDs and re-insert.
-                        await supabase.from('class_assignments').delete().in('class_id', idsToUpdate);
-                        if (formData.student_ids.length > 0) {
-                            const assignments = idsToUpdate.flatMap(cid =>
-                                formData.student_ids.map(sid => ({ class_id: cid, student_id: sid }))
-                            );
-                            await supabase.from('class_assignments').insert(assignments);
+                        
+                        for (const dStr of uniqueDates) {
+                            if (dStr === formData.date && formData.merged_ids) {
+                                await syncGroupForDate(dStr, newSeriesId, formData.merged_ids);
+                            } else {
+                                const { data: dateRows } = await supabase.from('classes').select('id').eq('event_id', formData.event_id).eq('date', dStr);
+                                if (dateRows && dateRows.length > 0) {
+                                    await syncGroupForDate(dStr, newSeriesId, dateRows.map(r => r.id));
+                                }
+                            }
                         }
                     }
 
@@ -581,31 +664,14 @@ const AdminCalendar: React.FC = () => {
                     // Update ALL events in series
                     const { data: allClasses } = await supabase
                         .from('classes')
-                        .select('id')
+                        .select('id, date')
                         .eq('event_id', formData.event_id);
 
                     if (allClasses && allClasses.length > 0) {
-                        const idsToUpdate = allClasses.map(c => c.id);
-
-                        const { error } = await supabase
-                            .from('classes')
-                            .update({
-                                title: basePayload.title,
-                                teacher_id: basePayload.teacher_id,
-                                status: basePayload.status,
-                                student_name: basePayload.student_name,
-                                // Again, avoiding date clobbering.
-                            })
-                            .in('id', idsToUpdate);
-
-                        if (error) throw error;
-
-                        await supabase.from('class_assignments').delete().in('class_id', idsToUpdate);
-                        if (formData.student_ids.length > 0) {
-                            const assignments = idsToUpdate.flatMap(cid =>
-                                formData.student_ids.map(sid => ({ class_id: cid, student_id: sid }))
-                            );
-                            await supabase.from('class_assignments').insert(assignments);
+                        const uniqueDates = Array.from(new Set(allClasses.map(c => c.date)));
+                        for (const dStr of uniqueDates) {
+                            const idsForDate = allClasses.filter(c => c.date === dStr).map(c => c.id);
+                            await syncGroupForDate(dStr, formData.event_id!, idsForDate);
                         }
                     }
                 }
@@ -712,9 +778,6 @@ const AdminCalendar: React.FC = () => {
 
                     const payload = {
                         date: newDateStr,
-                        start_time: startTimeISO,
-                        end_time: endTimeISO,
-                        teacher_id: cls.teacher_id,
                         status: 'published', // Force published? Or keep cls.status?
                         title: cls.title,
                         student_name: cls.student_name,

@@ -17,12 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-const CLASS_LEVELS = [
-  'Beginner',
-  'Intermediate',
-  'Advanced 1',
-  'Advanced 2',
-]
+import { CLASS_LEVELS } from '@/lib/courseUtils';
 
 
 const TeacherGrade: React.FC = () => {
@@ -58,7 +53,7 @@ const TeacherGrade: React.FC = () => {
         let listQuery = supabase
           .from('classes')
           .select('*')
-          .ilike('title', `%${teacherName}%`)
+          .or(`title.eq.${teacherName},title.ilike.%- ${teacherName}%`)
           .order('date', { ascending: false })
           .limit(50);
 
@@ -69,7 +64,7 @@ const TeacherGrade: React.FC = () => {
             .from('classes')
             .select('*')
             .eq('id', classId)
-            .ilike('title', `%${teacherName}%`);
+            .or(`title.eq.${teacherName},title.ilike.%- ${teacherName}%`);
 
           specificClassQuery = query.maybeSingle();
         }
@@ -338,6 +333,7 @@ const TeacherGrade: React.FC = () => {
                     <SelectItem value="Club">Club</SelectItem>
                     <SelectItem value="Entertainment">Entertainment</SelectItem>
                     <SelectItem value="Business">Business</SelectItem>
+                    <SelectItem value="Exam">Exam</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -4,11 +4,38 @@ import { useAuth } from "@/contexts/AuthContext"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, ExternalLink, MessageSquare } from "lucide-react"
+import { Calendar, ExternalLink, MessageSquare, CalendarClock } from "lucide-react"
+import { toast } from "sonner"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { format, parseISO } from "date-fns"
 import { toLocalDate, formatClassTime, getTimeZoneLabel } from "@/lib/dateUtils"
 import { fetchStudentNextChapters, NextChapterInfo, ClassType, fetchUpcomingClassType } from "@/lib/courseUtils"
 import { Link } from "react-router-dom"
+import { ReadOnlyCalendar } from "@/components/calendar/ReadOnlyCalendar"
+
+const extractClassName = (title: string, studentName?: string) => {
+  if (!title) return 'Class';
+  if (!title.includes(' - ')) return studentName ? `${studentName.split(' ')[0]}'s class` : 'Class';
+  const parts = title.split(' - ');
+  return parts[0].trim();
+};
+
+const extractTeacherName = (title: string) => {
+  if (!title) return '';
+  if (!title.includes(' - ')) return title;
+  const parts = title.split(' - ');
+  return parts.length > 1 ? parts[1].trim() : '';
+};
 
 const StudentDashboard: React.FC = () => {
   const { studentName, user } = useAuth()
@@ -16,6 +43,7 @@ const StudentDashboard: React.FC = () => {
   const [nextClass, setNextClass] = useState<Class | null>(null)
   const [nextChapters, setNextChapters] = useState<Partial<Record<ClassType, NextChapterInfo>>>({})
   const [upcomingClassType, setUpcomingClassType] = useState<ClassType | null>(null)
+  const [upcomingExamCompleted, setUpcomingExamCompleted] = useState(false)
   const [lastClass, setLastClass] = useState<Class | null>(null)
   const [pendingPayment, setPendingPayment] = useState<Payment | null>(null)
   const [paymentDueDay, setPaymentDueDay] = useState<number>(9)
@@ -33,7 +61,7 @@ const StudentDashboard: React.FC = () => {
 
     const loadDashboard = async () => {
       console.log('StudentDashboard: Loading dashboard data...'); // Force HMR
-      const today = new Date().toISOString().split("T")[0]
+      const today = format(new Date(), 'yyyy-MM-dd')
       let studentId = "";
 
       // 0. Fetch Student ID and Settings
@@ -62,7 +90,7 @@ const StudentDashboard: React.FC = () => {
       const { data: legacyNext } = await supabase
         .from("classes")
         .select("*")
-        .eq("student_name", studentName)
+        .ilike("student_name", `%${studentName}%`)
         .gte("date", today)
         .order("date", { ascending: true })
         .order("time", { ascending: true })
@@ -75,7 +103,6 @@ const StudentDashboard: React.FC = () => {
           .from("classes")
           .select(`
             *,
-            teachers(name, meet_link),
             class_assignments!inner(student_id)
           `)
           .eq("class_assignments.student_id", studentId)
@@ -87,8 +114,8 @@ const StudentDashboard: React.FC = () => {
           relationalNext = newClasses.map((cls: any) => ({
             ...cls,
             time: cls.start_time || cls.time,
-            title: cls.teachers?.name || cls.title,
-            link_url: cls.teachers?.meet_link || cls.link_url
+            title: cls.title,
+            link_url: cls.link_url
           }));
         }
       }
@@ -137,6 +164,21 @@ const StudentDashboard: React.FC = () => {
       const upcomingType = await fetchUpcomingClassType(studentName)
       setUpcomingClassType(upcomingType)
 
+      let isExamCompleted = false;
+      if (studentId && upcomingType === 'Exam') {
+        const { data: subs } = await supabase
+          .from('exam_submissions')
+          .select('completed_at')
+          .eq('student_id', studentId)
+          .order('created_at', { ascending: false })
+          .limit(1);
+          
+        if (subs && subs.length > 0 && subs[0].completed_at) {
+          isExamCompleted = true;
+        }
+      }
+      setUpcomingExamCompleted(isExamCompleted)
+
       // LAST GRADED CLASS
       // 1. Legacy Query
       let lastGradedClass: Class | null = null;
@@ -144,7 +186,7 @@ const StudentDashboard: React.FC = () => {
       const { data: legacyLast } = await supabase
         .from("classes")
         .select("*")
-        .eq("student_name", studentName)
+        .ilike("student_name", `%${studentName}%`)
         .not("class_grade", "is", null)
         .order("date", { ascending: false })
         .limit(1)
@@ -241,6 +283,46 @@ const StudentDashboard: React.FC = () => {
     }
   }, [studentName, user?.id])
 
+  const confirmReschedule = async (cls: Class) => {
+    try {
+      if (!user) throw new Error("Not logged in");
+      
+      // 1. Delete class
+      const { error: deleteError } = await supabase.from('classes').delete().eq('id', cls.id);
+      if (deleteError) throw deleteError;
+
+      // 2. Add recuperation
+      const { error: recupError } = await supabase.from('recuperation_classes').insert({
+        student_id: user.id,
+        status: 'pending',
+        date: cls.date, // optional reference
+        notes: `Rescheduled from ${cls.date} ${cls.time}`
+      });
+      if (recupError) throw recupError;
+
+      // 3. Notify teacher (optional, doing it if possible)
+      const teacherName = extractTeacherName(cls.title);
+      if (teacherName) {
+        const { data: teacherData } = await supabase.from('teachers').select('id').ilike('name', teacherName).maybeSingle();
+        if (teacherData) {
+          await supabase.from('messages').insert({
+            sender_id: user.id,
+            receiver_id: teacherData.id,
+            content: `Hello! I have rescheduled our class on ${cls.date} at ${cls.time}. A recuperation has been added to my account.`,
+            is_read: false
+          });
+        }
+      }
+
+      toast.success('Class rescheduled! A recuperation credit has been added.');
+      setNextClass(null); // Clear the next class
+
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Failed to reschedule.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -264,73 +346,20 @@ const StudentDashboard: React.FC = () => {
 
       {/* GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* NEXT CLASS */}
+        {/* SCHEDULE COMPACT VIEW */}
         <Card className="shadow-sm hover:shadow-md transition">
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
-              📅 Next Class
+              📅 This Week's Schedule
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {nextClass ? (
-              <>
-                <p className="text-2xl font-bold">
-                  {(() => {
-                    const localDate = toLocalDate(nextClass.date, nextClass.time);
-                    return format(localDate, "EEEE, MMM d");
-                  })()}
-                </p>
-                <p className="text-lg font-semibold mt-1">
-                  {nextClass.title}
-                </p>
-                {upcomingClassType && (
-                  <div className="mt-1">
-                    <Badge variant={upcomingClassType === 'Grammar' ? 'default' : 'secondary'} className="uppercase text-xs font-bold px-2 py-1">
-                      {upcomingClassType} CLASS
-                    </Badge>
-                  </div>
-                )}
-                <p className="text-primary font-medium flex items-center gap-2 mt-2">
-                  at {formatClassTime(nextClass.date, nextClass.time)}
-                  <span className="text-xs text-muted-foreground font-normal">
-                    ({getTimeZoneLabel()})
-                  </span>
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Teacher: {nextClass.teachers?.name || 'Unknown'}
-                </p>
-
-                {Object.keys(nextChapters).length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {Object.entries(nextChapters).map(
-                      ([type, info]) =>
-                        info && (
-                          <Badge key={type} variant="secondary">
-                            {type}: Chapter {info.chapter} ({info.level})
-                          </Badge>
-                        )
-                    )}
-                  </div>
-                )}
-
-                {nextClass.link_url && (
-                  <Button asChild className="w-full mt-3">
-                    <a
-                      href={nextClass.link_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Enter Class
-                      <ExternalLink className="ml-2 h-4 w-4" />
-                    </a>
-                  </Button>
-                )}
-              </>
-            ) : (
-              <p className="text-muted-foreground">
-                No upcoming classes scheduled
-              </p>
-            )}
+          <CardContent className="space-y-4">
+            <div className="rounded-md border overflow-hidden">
+              <ReadOnlyCalendar role="student" identifier={studentName || ''} compact={true} />
+            </div>
+            <Button asChild className="w-full font-semibold">
+              <Link to="/student/classes">See full schedule</Link>
+            </Button>
           </CardContent>
         </Card>
 
