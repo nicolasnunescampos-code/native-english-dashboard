@@ -1,5 +1,8 @@
+'use client';
+
 import React, { useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
@@ -120,6 +123,7 @@ const adminNavItems: NavItem[] = [
 
 export const Sidebar: React.FC = () => {
   const { role, signOut, user, studentName, teacherName, rulesAgreed } = useAuth()
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [totalUnread, setTotalUnread] = useState(0)
   const [pendingReportsCount, setPendingReportsCount] = useState(0)
@@ -264,17 +268,15 @@ export const Sidebar: React.FC = () => {
                     <ul className="mt-1 space-y-1 ml-[1.65rem] border-l-2 border-muted pl-4">
                       {item.subItems.map(subItem => (
                         <li key={subItem.path}>
-                          <NavLink
-                            to={subItem.path}
+                          <Link
+                            href={subItem.path}
                             onClick={() => setOpen(false)}
-                            className={({ isActive }) =>
-                              cn(
-                                'flex items-center justify-between px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                                isActive
-                                  ? 'bg-primary/10 text-primary'
-                                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                              )
-                            }
+                            className={cn(
+                              'flex items-center justify-between px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                              pathname === subItem.path
+                                ? 'bg-primary/10 text-primary'
+                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                            )}
                           >
                             <div className="flex items-center gap-3 w-full">
                               <div className="flex items-center gap-3">
@@ -285,7 +287,7 @@ export const Sidebar: React.FC = () => {
                                 <div className="w-2 h-2 bg-destructive rounded-full animate-pulse shrink-0 ml-auto" title="Pending reports to complete" />
                               )}
                             </div>
-                          </NavLink>
+                          </Link>
                         </li>
                       ))}
                     </ul>
@@ -296,17 +298,15 @@ export const Sidebar: React.FC = () => {
 
             return (
               <li key={item.path}>
-                <NavLink
-                  to={item.path}
+                <Link
+                  href={item.path}
                   onClick={() => setOpen(false)}
-                  className={({ isActive }) =>
-                    cn(
-                      'flex items-center justify-between px-4 py-3 rounded-lg text-sm font-medium transition-colors',
-                      isActive
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                    )
-                  }
+                  className={cn(
+                    'flex items-center justify-between px-4 py-3 rounded-lg text-sm font-medium transition-colors',
+                    pathname === item.path
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )}
                 >
                   <div className="flex items-center gap-3 w-full">
                     <div className="flex items-center gap-3">
@@ -322,7 +322,7 @@ export const Sidebar: React.FC = () => {
                   {role === 'student' && item.label === 'Rules' && rulesAgreed === false && (
                     <div className="w-2 h-2 bg-destructive rounded-full animate-pulse shrink-0" title="Please agree to the rules" />
                   )}
-                </NavLink>
+                </Link>
               </li>
             )
           })}

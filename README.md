@@ -44,11 +44,11 @@ A comprehensive web application for managing English classes, students, and educ
 
 ## 🛠 Tech Stack
 
-- **Frontend**: React (Vite), TypeScript
+- **Framework**: Next.js 16 (App Router), React 19, TypeScript
 - **UI Framework**: Tailwind CSS, Shadcn UI
 - **Backend**: Supabase (Auth, Database, Storage, Edge Functions)
 - **State Management**: React Query
-- **PWA**: vite-plugin-pwa
+- **PWA**: Web App Manifest via `app/manifest.ts` (see PWA note below)
 
 ## 📦 Installation & Setup
 
@@ -60,29 +60,34 @@ A comprehensive web application for managing English classes, students, and educ
 
 2.  **Install dependencies**:
     ```bash
-    npm install
+    pnpm install
     ```
 
 3.  **Environment Setup**:
-    Create a `.env` file with your Supabase credentials:
+    Create a `.env.local` file with your Supabase credentials (see `.env.example`):
     ```env
-    VITE_SUPABASE_URL=your_project_url
-    VITE_SUPABASE_ANON_KEY=your_anon_key
+    NEXT_PUBLIC_SUPABASE_URL=your_project_url
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
     ```
 
 4.  **Run Development Server**:
     ```bash
-    npm run dev
+    pnpm dev
     ```
 
 5.  **Build for Production**:
     ```bash
-    npm run build
+    pnpm build && pnpm start
     ```
 
 ## 📱 Supported Platforms
 - **Web**: Chrome, Safari, Firefox, Edge
 - **Mobile**: Android (Chrome PWA), iOS (Safari PWA)
+
+> **PWA note:** The web manifest and iOS install prompt are preserved, but the
+> service worker that `vite-plugin-pwa` generated automatically was removed with
+> Vite. For full installability/offline support on Next.js, add a service worker
+> via [Serwist](https://serwist.pages.dev/) or `@ducanh2912/next-pwa`.
 
 ---
 *Built for Native English.*
