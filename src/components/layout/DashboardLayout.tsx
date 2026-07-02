@@ -1,5 +1,7 @@
+'use client';
+
 import React from 'react'
-import { Outlet } from 'react-router-dom'
+import { usePathname } from 'next/navigation'
 import { Sidebar } from './Sidebar'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -8,8 +10,15 @@ interface DashboardLayoutProps {
   hideHeader?: boolean
 }
 
-export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, hideHeader = false }) => {
+// Routes that render their own full-bleed UI and hide the greeting header.
+const shouldHideHeader = (pathname: string) =>
+  pathname.endsWith('/videos') ||
+  pathname.endsWith('/messages') ||
+  /\/exams\/[^/]+$/.test(pathname)
+
+export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, hideHeader }) => {
   const { studentName, teacherName, role } = useAuth()
+  const pathname = usePathname()
 
   const displayName =
     role === 'student'
@@ -17,6 +26,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, hide
       : role === 'teacher'
         ? teacherName
         : 'Admin'
+
+  const headerHidden = hideHeader ?? shouldHideHeader(pathname ?? '')
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-background">
@@ -27,7 +38,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, hide
       <main className="flex-1 overflow-x-hidden">
         <div className="px-4 py-6 sm:px-6 lg:px-8">
           {/* Header */}
-          {!hideHeader && (
+          {!headerHidden && (
             <div className="mb-6">
               <h1 className="text-xl sm:text-2xl font-semibold text-foreground">
                 Hi, {displayName} 👋
@@ -39,9 +50,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, hide
           )}
 
           {/* Page Content */}
-          <div className="w-full">
-            {children || <Outlet />}
-          </div>
+          <div className="w-full">{children}</div>
         </div>
       </main>
     </div>

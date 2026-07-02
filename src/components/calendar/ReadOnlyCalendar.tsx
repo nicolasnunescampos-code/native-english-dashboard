@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, useState, useCallback } from 'react';
 import { Calendar, dateFnsLocalizer, Event as CalendarEvent, View, EventProps } from 'react-big-calendar';
 import { format, parse, startOfWeek, endOfWeek, getDay } from 'date-fns';
