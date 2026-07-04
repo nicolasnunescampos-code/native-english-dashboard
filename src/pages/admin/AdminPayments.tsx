@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Undo2, CheckCircle2, Trash2, Eye, EyeOff } from 'lucide-react';
+import { Undo2, CheckCircle2, Trash2, Eye, EyeOff, Settings } from 'lucide-react';
 
 interface PaymentWithStudent extends Payment {
   student_name?: string;
@@ -30,6 +30,17 @@ const AdminPayments: React.FC = () => {
     EUR: 0,
     CAD: 0,
   });
+  const [rates, setRates] = useState(() => {
+    const saved = localStorage.getItem('currencyRates');
+    if (saved) return JSON.parse(saved);
+    return { USD: 5.20, EUR: 6.20, CAD: 3.80 };
+  });
+  const [globalCurrency, setGlobalCurrency] = useState('BRL');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('currencyRates', JSON.stringify(rates));
+  }, [rates]);
 
   const fetchPayments = async () => {
     try {
@@ -209,7 +220,10 @@ const AdminPayments: React.FC = () => {
       {/* GLOBAL TOTAL */}
       <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
         <CardContent className="p-6 flex flex-col items-center text-center relative">
-          <div className="absolute top-4 right-4">
+          <div className="absolute top-4 right-4 flex gap-2">
+            <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(!isSettingsOpen)}>
+              <Settings className="h-5 w-5 text-green-800" />
+            </Button>
             <Button variant="ghost" size="icon" onClick={() => setShowTotal(!showTotal)}>
               {showTotal ? <EyeOff className="h-5 w-5 text-green-800" /> : <Eye className="h-5 w-5 text-green-800" />}
             </Button>
@@ -217,14 +231,52 @@ const AdminPayments: React.FC = () => {
           <p className="text-sm font-medium text-green-800 uppercase tracking-wider mb-1">
             Total Revenue (Global)
           </p>
+          
+          <div className="mb-4">
+            <Tabs value={globalCurrency} onValueChange={setGlobalCurrency} className="w-[300px] mx-auto">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="BRL">BRL</TabsTrigger>
+                <TabsTrigger value="USD">USD</TabsTrigger>
+                <TabsTrigger value="CAD">CAD</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+
           <h3 className="text-4xl font-extrabold text-green-700">
-            {showTotal 
-              ? `R$ ${((totals.BRL) + (totals.USD * 5.20) + (totals.EUR * 6.20) + (totals.CAD * 3.80)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-              : 'R$ ****'}
+            {(() => {
+              if (!showTotal) return '****';
+              const totalInBRL = totals.BRL + (totals.USD * rates.USD) + (totals.EUR * rates.EUR) + (totals.CAD * rates.CAD);
+              
+              if (globalCurrency === 'BRL') return `R$ ${totalInBRL.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+              if (globalCurrency === 'USD') return `$ ${(totalInBRL / rates.USD).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+              if (globalCurrency === 'CAD') return `C$ ${(totalInBRL / rates.CAD).toLocaleString('en-CA', { minimumFractionDigits: 2 })}`;
+              return '';
+            })()}
           </h3>
           <p className="text-xs text-muted-foreground mt-2">
-            *Approximate conversion: USD 5.20, EUR 6.20, CAD 3.80
+            *Conversion rates: USD {rates.USD}, EUR {rates.EUR}, CAD {rates.CAD}
           </p>
+
+          {isSettingsOpen && (
+            <div className="mt-6 p-4 bg-white/60 rounded-lg w-full max-w-sm flex flex-col gap-3 shadow-inner">
+              <div className="text-sm font-semibold text-left text-green-900 mb-1">Exchange Rates (to BRL)</div>
+              <div className="flex items-center justify-between gap-4">
+                <label className="text-sm font-medium">1 USD =</label>
+                <input type="number" step="0.01" className="flex-1 rounded-md border-green-200 border p-2 text-sm focus:ring-green-500 focus:border-green-500" value={rates.USD} onChange={e => setRates({...rates, USD: parseFloat(e.target.value) || 0})} />
+                <span className="text-sm text-muted-foreground w-8">BRL</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <label className="text-sm font-medium">1 EUR =</label>
+                <input type="number" step="0.01" className="flex-1 rounded-md border-green-200 border p-2 text-sm focus:ring-green-500 focus:border-green-500" value={rates.EUR} onChange={e => setRates({...rates, EUR: parseFloat(e.target.value) || 0})} />
+                <span className="text-sm text-muted-foreground w-8">BRL</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <label className="text-sm font-medium">1 CAD =</label>
+                <input type="number" step="0.01" className="flex-1 rounded-md border-green-200 border p-2 text-sm focus:ring-green-500 focus:border-green-500" value={rates.CAD} onChange={e => setRates({...rates, CAD: parseFloat(e.target.value) || 0})} />
+                <span className="text-sm text-muted-foreground w-8">BRL</span>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
