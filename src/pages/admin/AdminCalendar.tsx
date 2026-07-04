@@ -151,9 +151,18 @@ const AdminCalendar: React.FC = () => {
                 if (teacher) {
                     color = teacher.color;
                 } else {
-                    const tName = cls.title || '';
-                    const t = currentTeachers.find(t => tName.toLowerCase().includes(t.name.toLowerCase()));
-                    if (t) color = t.color;
+                    if (cls.link_url) {
+                        const t = currentTeachers.find(t => t.meet_link === cls.link_url);
+                        if (t) color = t.color;
+                    }
+                    if (color === '#3788d8') {
+                        const tName = cls.title || '';
+                        const parts = tName.split('-');
+                        const lastPart = parts[parts.length - 1] || tName;
+                        let t = currentTeachers.find(t => lastPart.toLowerCase().includes(t.name.toLowerCase()));
+                        if (!t) t = currentTeachers.find(t => tName.toLowerCase().includes(t.name.toLowerCase()));
+                        if (t) color = t.color;
+                    }
                 }
 
                 return {
@@ -323,12 +332,20 @@ const AdminCalendar: React.FC = () => {
         // Fallback: Legacy Teacher Matching
         let teacherId = cls.teacher_id || '';
         if (!teacherId) {
-            const tName = cls.title || '';
-            // specific logic: if title contains teacher name
-            const t = teachers.find(teacher => tName.toLowerCase().includes(teacher.name.toLowerCase()));
-            if (t) {
-                teacherId = t.id;
-                console.log('DEBUG: Inferred teacherId from title:', tName, teacherId);
+            if (cls.link_url) {
+                const t = teachers.find(teacher => teacher.meet_link === cls.link_url);
+                if (t) teacherId = t.id;
+            }
+            if (!teacherId) {
+                const tName = cls.title || '';
+                const parts = tName.split('-');
+                const lastPart = parts[parts.length - 1] || tName;
+                let t = teachers.find(teacher => lastPart.toLowerCase().includes(teacher.name.toLowerCase()));
+                if (!t) t = teachers.find(teacher => tName.toLowerCase().includes(teacher.name.toLowerCase()));
+                if (t) {
+                    teacherId = t.id;
+                    console.log('DEBUG: Inferred teacherId from title:', tName, teacherId);
+                }
             }
         }
 
