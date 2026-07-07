@@ -194,14 +194,15 @@ const AdminTeachers: React.FC = () => {
         try {
             setLoading(true)
 
-            // We'll just call delete-user if we make it, or use delete-student since it's probably generic
-            // actually since we don't have delete-user yet, let's call delete-student under the hood (assuming it deletes auth user by ID)
-            const { error } = await supabase.functions.invoke("delete-student", {
+            // Delete auth user via edge function
+            await supabase.functions.invoke("delete-student", {
                 body: {
                     student_id: selectedTeacher.id,
                 },
             })
 
+            // Explicitly delete from teachers table
+            const { error } = await supabase.from('teachers').delete().eq('id', selectedTeacher.id)
             if (error) throw error
 
             toast({
