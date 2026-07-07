@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { format, startOfMonth, endOfMonth, getWeekOfMonth, parseISO, getWeeksInMonth, startOfWeek, endOfWeek, addDays, isBefore, isAfter, max, min } from 'date-fns'
+import { toast } from 'sonner'
 import {
   Table,
   TableBody,
@@ -18,7 +19,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText, Copy } from 'lucide-react'
 
 // Types
 type Teacher = { id: string; name: string; class_rate?: number }
@@ -57,6 +58,8 @@ export default function AdminTeacherPayments() {
     week: number;
     details: WeekDetails;
   } | null>(null)
+
+  const [selectedReceipt, setSelectedReceipt] = useState<typeof tableData[0] | null>(null)
 
   const handleRateChangeLocal = (teacherId: string, val: string) => {
     const parsed = parseFloat(val)
@@ -290,7 +293,12 @@ export default function AdminTeacherPayments() {
                       />
                     </TableCell>
                     <TableCell className="text-right font-bold text-lg whitespace-nowrap text-green-700 dark:text-green-500">
-                      ${row.totalPagar.toFixed(2)}
+                      <div className="flex items-center justify-end gap-3">
+                        ${row.totalPagar.toFixed(2)}
+                        <Button variant="ghost" size="icon" onClick={() => setSelectedReceipt(row)} title="Generate Receipt">
+                          <FileText className="w-5 h-5 text-muted-foreground hover:text-primary" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -386,6 +394,68 @@ export default function AdminTeacherPayments() {
                     <p className="text-sm text-muted-foreground pl-3">No pending classes.</p>
                   )}
                 </div>
+             </div>
+           )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!selectedReceipt} onOpenChange={(open) => !open && setSelectedReceipt(null)}>
+        <DialogContent className="max-w-sm">
+           <DialogHeader>
+             <DialogTitle className="text-xl text-center">
+               Payment Summary
+             </DialogTitle>
+           </DialogHeader>
+           
+           {selectedReceipt && (
+             <div className="space-y-4 mt-2">
+                <div className="text-center mb-6">
+                  <h3 className="font-bold text-2xl">{selectedReceipt.name}</h3>
+                  <p className="text-muted-foreground capitalize">{format(currentDate, 'MMMM yyyy')}</p>
+                </div>
+
+                <div className="bg-muted/30 p-6 rounded-lg border space-y-4 shadow-sm">
+                  <div className="space-y-3 border-b border-border/50 pb-4">
+                    {[...Array(maxWeeks)].map((_, i) => {
+                      const weekCount = selectedReceipt.weeks[i + 1] || 0;
+                      return (
+                        <div key={i} className="flex justify-between text-sm">
+                          <span className="text-muted-foreground font-medium">Week {i + 1}:</span>
+                          <span className="font-semibold text-foreground">{weekCount} class{weekCount !== 1 ? 'es' : ''}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground font-medium">Total Classes:</span>
+                      <span className="font-bold text-foreground">{selectedReceipt.totalAulas}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground font-medium">Rate per Class:</span>
+                      <span className="font-semibold text-foreground">${selectedReceipt.rate.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-xl font-extrabold mt-4 pt-4 border-t border-border/50">
+                      <span>Total:</span>
+                      <span className="text-green-600">${selectedReceipt.totalPagar.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <Button className="w-full mt-4" size="lg" onClick={() => {
+                  const text = `*${selectedReceipt.name} - ${format(currentDate, 'MMMM yyyy')}*\n\n` +
+                    [...Array(maxWeeks)].map((_, i) => `Week ${i + 1}: ${selectedReceipt.weeks[i + 1] || 0} classes`).join('\n') +
+                    `\n------------------\n` +
+                    `Total Classes: ${selectedReceipt.totalAulas}\n` +
+                    `Rate: $${selectedReceipt.rate.toFixed(2)}\n` +
+                    `*Total to Pay: $${selectedReceipt.totalPagar.toFixed(2)}*`;
+                  
+                  navigator.clipboard.writeText(text);
+                  toast.success('Copied to clipboard!');
+                }}>
+                  <Copy className="w-5 h-5 mr-2" />
+                  Copy for WhatsApp
+                </Button>
              </div>
            )}
         </DialogContent>
