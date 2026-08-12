@@ -14,18 +14,21 @@ import StudentPayments from "./pages/student/StudentPayments";
 import StudentMaterials from "./pages/student/StudentMaterials";
 import StudentAnnouncements from "./pages/student/StudentAnnouncements";
 import StudentVideos from "./pages/student/StudentVideos";
+import StudentAudios from "./pages/student/StudentAudios";
 import StudentRules from "./pages/student/StudentRules";
 import StudentProfile from "./pages/student/StudentProfile";
 import StudentReports from "./pages/student/StudentReports";
 import StudentRecuperations from "./pages/student/StudentRecuperations";
 import StudentExams from "./pages/student/StudentExams";
 import ExamRoom from "./pages/student/ExamRoom";
+import StudentBuddy from "./pages/student/StudentBuddy";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import TeacherSchedule from "./pages/teacher/TeacherSchedule";
 import TeacherGrade from "./pages/teacher/TeacherGrade";
 import TeacherStudents from "./pages/teacher/TeacherStudents";
 import TeacherMaterials from "./pages/teacher/TeacherMaterials";
 import TeacherRules from "./pages/teacher/TeacherRules";
+import TeacherProfile from "./pages/teacher/TeacherProfile";
 import AdminPayments from "./pages/admin/AdminPayments";
 import AdminStudents from "./pages/admin/AdminStudents";
 import AdminTeachers from "./pages/admin/AdminTeachers";
@@ -44,6 +47,7 @@ import AdminTeacherPayments from "./pages/admin/AdminTeacherPayments";
 import AdminReports from "./pages/admin/AdminReports";
 import AdminMaterials from "./pages/admin/AdminMaterials";
 import AdminExams from "./pages/admin/AdminExams";
+import AdminWorksheets from "./pages/admin/AdminWorksheets";
 import AdminCalendar from "./pages/admin/AdminCalendar";
 import NotFound from "./pages/NotFound";
 import Messages from "./pages/Messages";
@@ -129,6 +133,7 @@ const AppRoutes = () => {
       <Route path="/student/materials" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentMaterials /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/announcements" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentAnnouncements /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/videos" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout hideHeader={true}><StudentVideos /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/student/audios" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout hideHeader={true}><StudentAudios /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/messages" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout hideHeader={true}><Messages /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/rules" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentRules /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/profile" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentProfile /></DashboardLayout></ProtectedRoute>} />
@@ -136,17 +141,19 @@ const AppRoutes = () => {
       <Route path="/student/recuperations" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentRecuperations /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/exams" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentExams /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/exams/:id" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout hideHeader={true}><ExamRoom /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/student/buddy" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentBuddy /></DashboardLayout></ProtectedRoute>} />
 
       {/* Teacher Routes */}
       <Route path="/teacher" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout><TeacherDashboard /></DashboardLayout></ProtectedRoute>} />
       <Route path="/teacher/schedule" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout><TeacherSchedule /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/teacher/calendar" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout><TeacherCalendar /></DashboardLayout></ProtectedRoute>} />
       <Route path="/teacher/grade" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout><TeacherGrade /></DashboardLayout></ProtectedRoute>} />
       <Route path="/teacher/students" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout><TeacherStudents /></DashboardLayout></ProtectedRoute>} />
       <Route path="/teacher/materials" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout><TeacherMaterials /></DashboardLayout></ProtectedRoute>} />
       <Route path="/teacher/videos" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout hideHeader={true}><StudentVideos /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/teacher/audios" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout hideHeader={true}><StudentAudios /></DashboardLayout></ProtectedRoute>} />
       <Route path="/teacher/messages" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout hideHeader={true}><Messages /></DashboardLayout></ProtectedRoute>} />
       <Route path="/teacher/rules" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout><TeacherRules /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/teacher/profile" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout><TeacherProfile /></DashboardLayout></ProtectedRoute>} />
 
       {/* Admin Routes */}
       <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminMainDashboard /></DashboardLayout></ProtectedRoute>} />
@@ -162,6 +169,7 @@ const AppRoutes = () => {
       <Route path="/admin/grades" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminGrades /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/announcements" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminAnnouncements /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/materials" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminMaterials /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/worksheets" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminWorksheets /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/exams" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminExams /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/videos" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminVideos /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/messages" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout hideHeader={true}><Messages /></DashboardLayout></ProtectedRoute>} />

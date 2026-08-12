@@ -9,6 +9,7 @@ import { supabase, Class } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { Sparkles, Loader2 } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -42,6 +43,34 @@ const TeacherGrade: React.FC = () => {
   const [noChapter, setNoChapter] = useState(false);
   const [isAbsent, setIsAbsent] = useState(false);
   const [notes, setNotes] = useState<string>('');
+  const [improvingFeedback, setImprovingFeedback] = useState(false);
+
+  const handleImproveFeedback = async () => {
+    if (!notes.trim()) {
+      toast.error('Please write some notes first before improving them.');
+      return;
+    }
+
+    setImprovingFeedback(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('improve-feedback', {
+        body: { feedback: notes }
+      });
+
+      if (error) throw error;
+      if (data?.improvedFeedback) {
+        setNotes(data.improvedFeedback);
+        toast.success('Feedback improved successfully!');
+      } else {
+        throw new Error('No improved feedback returned');
+      }
+    } catch (err: any) {
+      console.error('Error improving feedback:', err);
+      toast.error('Failed to improve feedback. Please try again.');
+    } finally {
+      setImprovingFeedback(false);
+    }
+  };
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -331,8 +360,10 @@ const TeacherGrade: React.FC = () => {
                   <SelectContent>
                     <SelectItem value="Grammar">Grammar</SelectItem>
                     <SelectItem value="Club">Club</SelectItem>
-                    <SelectItem value="Entertainment">Entertainment</SelectItem>
-                    <SelectItem value="Business">Business</SelectItem>
+                    <SelectItem value="Reading">Reading</SelectItem>
+                    <SelectItem value="Listening">Listening</SelectItem>
+                    <SelectItem value="Club (Reading)">Club (Reading)</SelectItem>
+                    <SelectItem value="Club (Listening)">Club (Listening)</SelectItem>
                     <SelectItem value="Exam">Exam</SelectItem>
                   </SelectContent>
                 </Select>
@@ -385,7 +416,20 @@ const TeacherGrade: React.FC = () => {
 
               {/* Notes for the student */}
               <div className="space-y-2">
-                <Label htmlFor="notes">Notes for the student (optional)</Label>
+                <div className="flex justify-between items-center">
+                  <Label htmlFor="notes">Notes for the student (optional)</Label>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleImproveFeedback}
+                    disabled={improvingFeedback || !notes.trim()}
+                    className="gap-2 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                  >
+                    {improvingFeedback ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    {improvingFeedback ? 'Improving...' : 'Improve with AI'}
+                  </Button>
+                </div>
                 <Textarea
                   id="notes"
                   placeholder="Write feedback or observations for the student..."

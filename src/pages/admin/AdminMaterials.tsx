@@ -27,7 +27,7 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 
-const CATEGORIES = ['Grammar', 'Entertainment', 'Club', 'Business'];
+const CATEGORIES = ['Grammar', 'Reading', 'Listening', 'Club (Reading)', 'Club (Listening)', 'Club'];
 
 const getDriveId = (url: string) => {
     if (!url) return null;

@@ -33,7 +33,7 @@ interface Student {
   preferred_schedule?: string | null
   status?: 'active' | 'stopped'
   payment_due_day?: number
-  course_type?: 'Native English' | 'Conversation Club' | 'Business English'
+  course_type?: 'Native English' | 'Conversation Club'
 }
 
 const AdminStudents: React.FC = () => {
@@ -46,6 +46,7 @@ const AdminStudents: React.FC = () => {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
   const [loading, setLoading] = useState(false)
   const [showStopped, setShowStopped] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
 
   const [form, setForm] = useState<{
     email: string
@@ -58,7 +59,7 @@ const AdminStudents: React.FC = () => {
     preferred_schedule: string
     status: string
     payment_due_day: number
-    course_type: 'Native English' | 'Conversation Club' | 'Business English'
+    course_type: 'Native English' | 'Conversation Club'
   }>({
     email: "",
     password: "",
@@ -116,6 +117,40 @@ const AdminStudents: React.FC = () => {
       course_type: "Native English",
     })
   }
+
+  // =========================
+  // FIX CLASSES (Temporary Tool)
+  // =========================
+  const fixClasses = async () => {
+    setLoading(true);
+    try {
+      const { data: assignments, error: err1 } = await supabase.from('class_assignments').select('*');
+      if (err1) throw err1;
+
+      const { data: classesList, error: err2 } = await supabase.from('classes').select('id, student_name');
+      if (err2) throw err2;
+
+      const studentMap = new Map();
+      students.forEach(s => studentMap.set(s.id, s.student_name));
+
+      let fixedCount = 0;
+      for (const cls of classesList || []) {
+        const clsAssignments = (assignments || []).filter(a => a.class_id === cls.id);
+        if (clsAssignments.length > 0) {
+          const names = clsAssignments.map(a => studentMap.get(a.student_id)).filter(Boolean);
+          const correctName = names.join(', ');
+          if (correctName && correctName !== cls.student_name) {
+            await supabase.from('classes').update({ student_name: correctName }).eq('id', cls.id);
+            fixedCount++;
+          }
+        }
+      }
+      toast({ title: 'Fix Complete', description: `Fixed ${fixedCount} corrupted classes by recalculating student names.` });
+    } catch (err: any) {
+      toast({ title: 'Fix Failed', description: err.message, variant: 'destructive' });
+    }
+    setLoading(false);
+  };
 
   // =========================
   // CREATE STUDENT
@@ -287,6 +322,39 @@ const AdminStudents: React.FC = () => {
           .eq('status', 'pending')
       }
 
+      // Also update classes table if student name changed (to prevent orphaned classes)
+      if (form.student_name !== selectedStudent.student_name) {
+        // Find all class assignments for this student
+        const { data: assignments } = await supabase
+          .from('class_assignments')
+          .select('class_id')
+          .eq('student_id', selectedStudent.id)
+          
+        if (assignments && assignments.length > 0) {
+           const classIds = assignments.map(a => a.class_id)
+           // We need to fetch the current classes to properly update the comma-separated names
+           const { data: classesToUpdate } = await supabase
+             .from('classes')
+             .select('id, student_name')
+             .in('id', classIds)
+             
+           if (classesToUpdate) {
+             for (const cls of classesToUpdate) {
+               if (cls.student_name) {
+                 // Replace the old name with the new name in the comma-separated string
+                 const newNames = cls.student_name.split(',').map((name: string) => {
+                   return name.trim() === selectedStudent.student_name ? form.student_name : name.trim()
+                 })
+                 await supabase
+                   .from('classes')
+                   .update({ student_name: newNames.join(', ') })
+                   .eq('id', cls.id)
+               }
+             }
+           }
+        }
+      }
+
       toast({
         title: "Student updated",
         description: "Changes saved successfully.",
@@ -354,9 +422,12 @@ const AdminStudents: React.FC = () => {
   // =========================
   // UI
   // =========================
-  const displayStudents = showStopped 
-    ? students.filter(s => s.status === 'stopped')
-    : students.filter(s => s.status !== 'stopped')
+  const displayStudents = students
+    .filter(s => showStopped ? s.status === 'stopped' : s.status !== 'stopped')
+    .filter(s => 
+      s.student_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      s.email.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
   return (
     <div className="space-y-6">
@@ -365,17 +436,26 @@ const AdminStudents: React.FC = () => {
           <h2 className="text-xl font-semibold">Manage Students</h2>
           <p className="text-sm text-muted-foreground mt-1">Add, edit, or remove students from your system.</p>
         </div>
-        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4">
-          <label className="flex items-center gap-2 text-sm font-medium cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
+        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4 w-full sm:w-auto">
+          <Input
+            placeholder="Search students..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full sm:w-64 bg-white"
+          />
+          <label className="flex items-center gap-2 text-sm font-medium cursor-pointer text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap">
             <input 
               type="checkbox" 
               className="rounded border-gray-300 w-4 h-4"
               checked={showStopped}
               onChange={(e) => setShowStopped(e.target.checked)}
             />
-            Show Stopped Students Only
+            Show Stopped Only
           </label>
-          <Button onClick={() => { resetForm(); setOpenCreate(true); }}>Add Student</Button>
+          <Button variant="outline" onClick={fixClasses} disabled={loading} className="whitespace-nowrap">
+            Fix Schedule Data
+          </Button>
+          <Button onClick={() => { resetForm(); setOpenCreate(true); }} className="whitespace-nowrap">Add Student</Button>
         </div>
       </div>
 
@@ -495,6 +575,9 @@ const AdminStudents: React.FC = () => {
                   value={form.classes_per_week}
                   onChange={(e) => setForm({ ...form, classes_per_week: Number(e.target.value) })}
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Note: This is informational. To schedule multiple classes per week, you must manually create a separate recurring class for each day.
+                </p>
               </div>
               <div>
                 <Label>Currency</Label>
@@ -519,15 +602,14 @@ const AdminStudents: React.FC = () => {
               <Label>Course Type</Label>
               <Select
                 value={form.course_type}
-                onValueChange={(val: 'Native English' | 'Conversation Club' | 'Business English') => setForm({ ...form, course_type: val })}
+                onValueChange={(val: 'Native English' | 'Conversation Club') => setForm({ ...form, course_type: val })}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Native English">Native English (Grammar + Entertainment)</SelectItem>
+                  <SelectItem value="Native English">Native English (Grammar + Reading + Listening)</SelectItem>
                   <SelectItem value="Conversation Club">Conversation Club</SelectItem>
-                  <SelectItem value="Business English">Business English</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -604,6 +686,9 @@ const AdminStudents: React.FC = () => {
                   value={form.classes_per_week}
                   onChange={(e) => setForm({ ...form, classes_per_week: Number(e.target.value) })}
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Note: This is informational. To schedule multiple classes per week, you must manually create a separate recurring class for each day.
+                </p>
               </div>
               <div>
                 <Label>Currency</Label>
@@ -628,15 +713,14 @@ const AdminStudents: React.FC = () => {
               <Label>Course Type</Label>
               <Select
                 value={form.course_type}
-                onValueChange={(val: 'Native English' | 'Conversation Club' | 'Business English') => setForm({ ...form, course_type: val })}
+                onValueChange={(val: 'Native English' | 'Conversation Club') => setForm({ ...form, course_type: val })}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Native English">Native English (Grammar + Entertainment)</SelectItem>
+                  <SelectItem value="Native English">Native English (Grammar + Reading + Listening)</SelectItem>
                   <SelectItem value="Conversation Club">Conversation Club</SelectItem>
-                  <SelectItem value="Business English">Business English</SelectItem>
                 </SelectContent>
               </Select>
             </div>

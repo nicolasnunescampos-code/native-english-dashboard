@@ -36,16 +36,35 @@ const TeacherMaterials: React.FC = () => {
     { key: 'Grammar', label: 'Grammar' },
     { key: 'Entertainment', label: 'Entertainment' },
     { key: 'Club', label: 'Conversation Club' },
-    { key: 'business', label: 'Business' },
   ];
-  const levels = ['Beginner', 'Intermediate', 'Advanced', 'Business', 'Club'] as const;
+  const [activeSubCategory, setActiveSubCategory] = useState<"Reading" | "Listening">("Reading");
+  const [activeClubSubCategory, setActiveClubSubCategory] = useState<"Reading" | "Listening">("Reading");
+  const levels = ['Beginner', 'Intermediate', 'Advanced', 'Club'] as const;
 
   const getMaterialsByCategory = (categoryKey: string) => {
-    return materials.filter((m) => 
-      m.category && 
-      m.category.toLowerCase() === categoryKey.toLowerCase() &&
-      m.target_audience?.toLowerCase() !== 'student'
-    );
+    return materials.filter((m) => {
+      if (!m.category || m.target_audience?.toLowerCase() === 'student') return false;
+      if (categoryKey === 'Entertainment') {
+        const targetCat = activeSubCategory;
+        return m.category.toLowerCase() === targetCat.toLowerCase();
+      }
+      if (categoryKey === 'Club') {
+        const targetCat = `Club (${activeClubSubCategory})`;
+        return m.category.toLowerCase() === targetCat.toLowerCase();
+      }
+      return m.category.toLowerCase() === categoryKey.toLowerCase();
+    }).sort((a, b) => {
+      const getLevelScore = (title: string) => {
+        const t = title.toLowerCase();
+        if (t.includes('beginner')) return 1;
+        if (t.includes('intermediate')) return 2;
+        if (t.includes('advanced (1)') || t.includes('advanced 1')) return 3;
+        if (t.includes('advanced (2)') || t.includes('advanced 2')) return 4;
+        if (t.includes('advanced')) return 3;
+        return 5;
+      };
+      return getLevelScore(a.title) - getLevelScore(b.title);
+    });
   };
 
   const getLevelColor = (level: string) => {
@@ -56,10 +75,8 @@ const TeacherMaterials: React.FC = () => {
         return 'bg-warning/10 text-warning';
       case 'advanced':
         return 'bg-destructive/10 text-destructive';
-      case 'business':
-        return 'bg-blue-500/10 text-blue-500';
       case 'club':
-        return 'bg-purple-500/10 text-purple-500';
+        return 'bg-secondary/10 text-secondary';
       default:
         return 'bg-muted text-muted-foreground';
     }
@@ -82,7 +99,7 @@ const TeacherMaterials: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <h2 className="text-xl font-semibold flex items-center gap-2">
-        📚 Teaching Materials
+        📚 Books
       </h2>
 
       <Tabs defaultValue="Grammar" className="w-full">
@@ -96,6 +113,45 @@ const TeacherMaterials: React.FC = () => {
 
         {categories.map((category) => (
           <TabsContent key={category.key} value={category.key} className="space-y-4">
+            
+            {category.key === 'Entertainment' && (
+              <div className="flex gap-2 mt-4 mb-6">
+                <Button
+                  size="sm"
+                  variant={activeSubCategory === "Reading" ? "secondary" : "outline"}
+                  onClick={() => setActiveSubCategory("Reading")}
+                >
+                  📖 Reading
+                </Button>
+                <Button
+                  size="sm"
+                  variant={activeSubCategory === "Listening" ? "secondary" : "outline"}
+                  onClick={() => setActiveSubCategory("Listening")}
+                >
+                  🎧 Listening
+                </Button>
+              </div>
+            )}
+
+            {category.key === 'Club' && (
+              <div className="flex gap-2 mt-4 mb-6">
+                <Button
+                  size="sm"
+                  variant={activeClubSubCategory === "Reading" ? "secondary" : "outline"}
+                  onClick={() => setActiveClubSubCategory("Reading")}
+                >
+                  📖 Reading
+                </Button>
+                <Button
+                  size="sm"
+                  variant={activeClubSubCategory === "Listening" ? "secondary" : "outline"}
+                  onClick={() => setActiveClubSubCategory("Listening")}
+                >
+                  🎧 Listening
+                </Button>
+              </div>
+            )}
+
             {levels.map((level) => {
               const levelMaterials = getMaterialsByCategory(category.key).filter(
                 (m) => m.level && m.level.toLowerCase() === level.toLowerCase()

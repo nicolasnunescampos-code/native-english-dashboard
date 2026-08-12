@@ -7,6 +7,8 @@ import { useAuth } from "@/contexts/AuthContext"
 import { toLocalDate, getTimeZoneLabel } from "@/lib/dateUtils"
 import { fetchUpcomingClassType, ClassType, getNextLevel } from "@/lib/courseUtils"
 import { UnlockExamDialog } from "@/components/UnlockExamDialog"
+import { ReadOnlyCalendar } from "@/components/calendar/ReadOnlyCalendar"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 /* ---------------------------------------------
    Types
@@ -23,6 +25,7 @@ type ClassRow = {
   classroom_link?: string | null
   class_grade?: number | null
   is_absent?: boolean | null
+  timezone?: string | null
 }
 
 type HistoryRow = {
@@ -54,9 +57,9 @@ type EnrichedClass = ClassRow & {
 
 const MAX_CHAPTERS: Record<ClassType, number> = {
   Grammar: 10,
-  Entertainment: 20,
+  "Reading": 20,
+  "Listening": 20,
   Club: 20,
-  Business: 20,
   Exam: 99,
 }
 
@@ -209,7 +212,7 @@ export default function TeacherSchedule() {
         const studentHistory = history?.filter(h => h.student_name === student) ?? [];
         const nextChapters: Partial<Record<ClassType, NextChapterInfo>> = {};
 
-        for (const type of ["Grammar", "Entertainment", "Club", "Business"] as ClassType[]) {
+        for (const type of ["Grammar", "Reading", "Listening", "Club (Reading)", "Club (Listening)", "Club"] as ClassType[]) {
           const last = studentHistory
             .filter(
               h =>
@@ -255,7 +258,7 @@ export default function TeacherSchedule() {
         }
       }
 
-      const _localDate = toLocalDate(cls.date, cls.time)
+      const _localDate = toLocalDate(cls.date, cls.time, cls.timezone)
       return { ...cls, studentChapters, _localDate, studentNotes }
     })
 
@@ -325,7 +328,23 @@ export default function TeacherSchedule() {
 
   return (
     <div className="space-y-8">
+      
+      <Card className="shadow-sm">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            📅 Calendar View
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border overflow-hidden">
+            <ReadOnlyCalendar role="teacher" identifier={teacherName || ''} />
+          </div>
+        </CardContent>
+      </Card>
 
+      <h2 className="text-xl font-semibold flex items-center gap-2 mt-8">
+        📅 Upcoming Classes List
+      </h2>
 
       {grouped.map(([day, dayClasses]) => (
         <div key={day}>

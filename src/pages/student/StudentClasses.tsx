@@ -52,11 +52,26 @@ const StudentClasses: React.FC = () => {
       try {
         const today = format(new Date(), 'yyyy-MM-dd');
 
-        const { data, error } = await supabase
-          .from('classes')
-          .select('*')
-          .ilike('student_name', `%${studentName}%`)
-          .gte('date', today)
+        let matchedClassIds: number[] = [];
+        if (user?.id) {
+          // Fetch student UUID based on auth user
+          const { data: studentData } = await supabase.from('students').select('id').eq('email', user.email).maybeSingle();
+          if (studentData?.id) {
+             const { data: assignments } = await supabase.from('class_assignments').select('class_id').eq('student_id', studentData.id);
+             if (assignments) matchedClassIds = assignments.map(a => a.class_id);
+          }
+        }
+
+        let query = supabase.from('classes').select('*').gte('date', today);
+        if (matchedClassIds.length > 0) {
+           // We found relational links, so use them OR legacy name matching
+           query = query.or(`id.in.(${matchedClassIds.join(',')}),student_name.ilike.%${studentName}%`);
+        } else {
+           // Fallback to purely name matching
+           query = query.ilike('student_name', `%${studentName}%`);
+        }
+
+        const { data, error } = await query
           .order('date', { ascending: true })
           .order('time', { ascending: true });
 

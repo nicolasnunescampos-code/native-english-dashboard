@@ -25,7 +25,7 @@ interface GroupedByLevel {
 }
 
 const LEVELS = ['Beginner', 'Intermediate', 'Advanced', 'Advanced 2'];
-const CLASS_TYPES = ['Grammar', 'Entertainment', 'Club'];
+const CLASS_TYPES = ['Grammar', 'Reading', 'Listening', 'Club (Reading)', 'Club (Listening)', 'Club'];
 
 // Helper to map DB values to standard levels
 const normalizeLevel = (dbLevel: string | null): string => {

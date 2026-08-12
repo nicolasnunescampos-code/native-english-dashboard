@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 
-export type ClassType = "Grammar" | "Entertainment" | "Club" | "Business" | "Exam";
+export type ClassType = "Grammar" | "Reading" | "Listening" | "Club (Reading)" | "Club (Listening)" | "Club" | "Exam";
 
 export type NextChapterInfo = {
   chapter: number;
@@ -9,9 +9,11 @@ export type NextChapterInfo = {
 
 export const MAX_CHAPTERS: Record<ClassType, number> = {
   Grammar: 10,
-  Entertainment: 20,
+  "Reading": 20,
+  "Listening": 20,
+  "Club (Reading)": 20,
+  "Club (Listening)": 20,
   Club: 20,
-  Business: 20,
   Exam: 99,
 };
 
@@ -42,7 +44,7 @@ export async function fetchStudentNextChapters(
   const nextChapters: Partial<Record<ClassType, NextChapterInfo>> = {};
   if (!history) return nextChapters;
 
-  for (const type of ["Grammar", "Entertainment", "Club", "Business"] as ClassType[]) {
+  for (const type of ["Grammar", "Reading", "Listening", "Club (Reading)", "Club (Listening)", "Club"] as ClassType[]) {
     const last = history
       .filter(
         h =>
@@ -92,8 +94,6 @@ export async function fetchUpcomingClassType(studentName: string): Promise<Class
 
   if (courseType === 'Conversation Club') {
     return 'Club';
-  } else if (courseType === 'Business English') {
-    return 'Business';
   }
   
   const now = new Date();
@@ -151,7 +151,19 @@ export async function fetchUpcomingClassType(studentName: string): Promise<Class
     return 'Grammar';
   }
 
-  const hasGradedGrammar = weeklyClasses.some(c => c.class_type === 'Grammar');
-  
-  return hasGradedGrammar ? 'Entertainment' : 'Grammar';
+  // Sort them so we see the most recent
+  weeklyClasses.sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
+  const lastWeeklyClassType = weeklyClasses[0].class_type;
+
+  if (lastWeeklyClassType === 'Grammar') {
+    return 'Reading';
+  } else if (lastWeeklyClassType === 'Reading') {
+    return 'Listening';
+  } else if (lastWeeklyClassType === 'Club' || lastWeeklyClassType === 'Club (Listening)') {
+    return 'Club (Reading)';
+  } else if (lastWeeklyClassType === 'Club (Reading)') {
+    return 'Club (Listening)';
+  } else {
+    return 'Grammar';
+  }
 }

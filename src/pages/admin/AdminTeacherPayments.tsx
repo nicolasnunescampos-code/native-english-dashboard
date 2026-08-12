@@ -294,7 +294,7 @@ export default function AdminTeacherPayments() {
                     </TableCell>
                     <TableCell className="text-right font-bold text-lg whitespace-nowrap text-green-700 dark:text-green-500">
                       <div className="flex items-center justify-end gap-3">
-                        ${row.totalPagar.toFixed(2)}
+                        R${row.totalPagar.toFixed(2)}
                         <Button variant="ghost" size="icon" onClick={() => setSelectedReceipt(row)} title="Generate Receipt">
                           <FileText className="w-5 h-5 text-muted-foreground hover:text-primary" />
                         </Button>
@@ -310,7 +310,7 @@ export default function AdminTeacherPayments() {
             <div className="border rounded-xl p-6 bg-muted/40 min-w-[300px] text-right shadow-sm relative overflow-hidden">
               <div className="absolute top-0 right-0 w-2 h-full bg-green-500/20"></div>
               <p className="text-sm font-semibold text-muted-foreground mb-1 uppercase tracking-wider">Total Salarios</p>
-              <p className="text-4xl font-bold text-primary">${globalTotal.toFixed(2)}</p>
+              <p className="text-4xl font-bold text-primary">R${globalTotal.toFixed(2)}</p>
             </div>
           </div>
         </div>
@@ -433,11 +433,11 @@ export default function AdminTeacherPayments() {
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground font-medium">Rate per Class:</span>
-                      <span className="font-semibold text-foreground">${selectedReceipt.rate.toFixed(2)}</span>
+                      <span className="font-semibold text-foreground">R${selectedReceipt.rate.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-xl font-extrabold mt-4 pt-4 border-t border-border/50">
                       <span>Total:</span>
-                      <span className="text-green-600">${selectedReceipt.totalPagar.toFixed(2)}</span>
+                      <span className="text-green-600">R${selectedReceipt.totalPagar.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -447,8 +447,8 @@ export default function AdminTeacherPayments() {
                     [...Array(maxWeeks)].map((_, i) => `Week ${i + 1}: ${selectedReceipt.weeks[i + 1] || 0} classes`).join('\n') +
                     `\n------------------\n` +
                     `Total Classes: ${selectedReceipt.totalAulas}\n` +
-                    `Rate: $${selectedReceipt.rate.toFixed(2)}\n` +
-                    `*Total to Pay: $${selectedReceipt.totalPagar.toFixed(2)}*`;
+                    `Rate: R$${selectedReceipt.rate.toFixed(2)}\n` +
+                    `*Total to Pay: R$${selectedReceipt.totalPagar.toFixed(2)}*`;
                   
                   navigator.clipboard.writeText(text);
                   toast.success('Copied to clipboard!');

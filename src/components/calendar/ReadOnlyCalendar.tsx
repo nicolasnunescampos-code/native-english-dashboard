@@ -141,8 +141,12 @@ export const ReadOnlyCalendar: React.FC<ReadOnlyCalendarProps> = ({ role, identi
                     color = teacher.color;
                 } else {
                     const tName = cls.title || '';
-                    const t = currentTeachers.find(t => tName.toLowerCase().includes(t.name.toLowerCase()));
-                    if (t) color = t.color;
+                    if (tName.includes('-')) {
+                        const parts = tName.split('-');
+                        const lastPart = parts[parts.length - 1].trim();
+                        const t = currentTeachers.find(t => lastPart.toLowerCase().includes(t.name.toLowerCase()));
+                        if (t) color = t.color;
+                    }
                 }
 
                 return {

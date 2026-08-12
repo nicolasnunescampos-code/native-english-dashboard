@@ -275,7 +275,7 @@ export const ClassModal: React.FC<ClassFormProps> = ({
                                 />
                             </div>
                             <p className="text-xs text-muted-foreground">
-                                Class will repeat weekly until this date.
+                                Class will repeat weekly until this date. Note: This creates 1 class per week. For students taking multiple classes per week, you must create a separate recurring class for each day.
                             </p>
                         </div>
                     )}

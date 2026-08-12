@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Undo2, CheckCircle2, Trash2, Eye, EyeOff, Settings } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 interface PaymentWithStudent extends Payment {
   student_name?: string;
@@ -23,6 +24,7 @@ const AdminPayments: React.FC = () => {
   const [pendingPayments, setPendingPayments] = useState<PaymentWithStudent[]>([]);
   const [paidPayments, setPaidPayments] = useState<PaymentWithStudent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
   const [showTotal, setShowTotal] = useState(true);
   const [totals, setTotals] = useState<Record<string, number>>({
     BRL: 0,
@@ -322,20 +324,29 @@ const AdminPayments: React.FC = () => {
       {/* Payments List */}
       <div>
         <Tabs defaultValue="pending" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-4">
-            <TabsTrigger value="pending">
-              Pending Payments
-              <span className="ml-2 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
-                {pendingPayments.length}
-              </span>
-            </TabsTrigger>
-            <TabsTrigger value="paid">
-              Paid Payments
-              <span className="ml-2 rounded-full bg-success/10 px-2.5 py-0.5 text-xs font-semibold text-success">
-                {paidPayments.length}
-              </span>
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex flex-col sm:flex-row justify-start items-start sm:items-center gap-4 mb-4">
+            <TabsList className="grid w-full sm:w-auto grid-cols-2">
+              <TabsTrigger value="pending">
+                Pending Payments
+                <span className="ml-2 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                  {pendingPayments.length}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="paid">
+                Paid Payments
+                <span className="ml-2 rounded-full bg-success/10 px-2.5 py-0.5 text-xs font-semibold text-success">
+                  {paidPayments.length}
+                </span>
+              </TabsTrigger>
+            </TabsList>
+
+            <Input
+              placeholder="Search students..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full sm:w-64 bg-white"
+            />
+          </div>
 
           <TabsContent value="pending">
             <Card>
@@ -350,14 +361,16 @@ const AdminPayments: React.FC = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {pendingPayments.length === 0 ? (
+                    {pendingPayments.filter(p => (p.student_name || '').toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                          No pending payments this month 🎉
+                          No pending payments found.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      pendingPayments.map((payment, index) => (
+                      pendingPayments
+                        .filter(p => (p.student_name || '').toLowerCase().includes(searchQuery.toLowerCase()))
+                        .map((payment, index) => (
                         <TableRow key={index}>
                           <TableCell className="font-medium">
                             {payment.student_name || 'Unknown'}
@@ -419,14 +432,16 @@ const AdminPayments: React.FC = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paidPayments.length === 0 ? (
+                    {paidPayments.filter(p => (p.student_name || '').toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                          No payments have been marked as paid this month yet.
+                          No paid payments found.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      paidPayments.map((payment, index) => (
+                      paidPayments
+                        .filter(p => (p.student_name || '').toLowerCase().includes(searchQuery.toLowerCase()))
+                        .map((payment, index) => (
                         <TableRow key={index}>
                           <TableCell className="font-medium">
                             {payment.student_name || 'Unknown'}

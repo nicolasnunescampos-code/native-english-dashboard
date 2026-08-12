@@ -19,6 +19,7 @@ interface Teacher {
     name: string
     color: string
     meet_link?: string | null
+    class_rate?: number | null
 }
 
 const AdminTeachers: React.FC = () => {
@@ -37,6 +38,7 @@ const AdminTeachers: React.FC = () => {
         name: "",
         color: "#3b82f6",
         meet_link: "",
+        class_rate: "",
     })
 
     // =========================
@@ -74,6 +76,7 @@ const AdminTeachers: React.FC = () => {
             name: "",
             color: "#3b82f6",
             meet_link: "",
+            class_rate: "",
         })
     }
 
@@ -116,6 +119,13 @@ const AdminTeachers: React.FC = () => {
 
             if (error) throw error
 
+            if (form.class_rate) {
+                const { data: newTeacher } = await supabase.from('teachers').select('id').eq('name', form.name).single()
+                if (newTeacher) {
+                    await supabase.from('teachers').update({ class_rate: Number(form.class_rate) }).eq('id', newTeacher.id)
+                }
+            }
+
             toast({
                 title: "Teacher created",
                 description: "Teacher created successfully.",
@@ -147,6 +157,7 @@ const AdminTeachers: React.FC = () => {
             name: teacher.name,
             color: teacher.color,
             meet_link: teacher.meet_link || "",
+            class_rate: teacher.class_rate ? String(teacher.class_rate) : "",
         })
         setOpenEdit(true)
     }
@@ -162,6 +173,7 @@ const AdminTeachers: React.FC = () => {
                     name: form.name,
                     color: form.color,
                     meet_link: form.meet_link,
+                    class_rate: form.class_rate ? Number(form.class_rate) : null,
                 })
                 .eq('id', selectedTeacher.id)
 
@@ -251,6 +263,12 @@ const AdminTeachers: React.FC = () => {
                                     <a href={teacher.meet_link} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">
                                         Meet Link
                                     </a>
+                                </div>
+                            )}
+
+                            {teacher.class_rate !== undefined && teacher.class_rate !== null && (
+                                <div className="text-sm font-medium text-green-600">
+                                    Rate: R${Number(teacher.class_rate).toFixed(2)}
                                 </div>
                             )}
 
@@ -344,6 +362,18 @@ const AdminTeachers: React.FC = () => {
                             />
                         </div>
 
+                        <div>
+                            <Label>Rate per Class (R$)</Label>
+                            <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={form.class_rate}
+                                onChange={(e) => setForm({ ...form, class_rate: e.target.value })}
+                                placeholder="e.g. 16.50"
+                            />
+                        </div>
+
                         <Button className="w-full" onClick={handleCreateTeacher} disabled={loading}>
                             {loading ? "Creating..." : "Create Teacher"}
                         </Button>
@@ -392,6 +422,18 @@ const AdminTeachers: React.FC = () => {
                             <Input
                                 value={form.meet_link}
                                 onChange={(e) => setForm({ ...form, meet_link: e.target.value })}
+                            />
+                        </div>
+
+                        <div>
+                            <Label>Rate per Class (R$)</Label>
+                            <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={form.class_rate}
+                                onChange={(e) => setForm({ ...form, class_rate: e.target.value })}
+                                placeholder="e.g. 16.50"
                             />
                         </div>
 

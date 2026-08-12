@@ -7,6 +7,7 @@ import { fromZonedTime, formatInTimeZone } from 'date-fns-tz';
 import { supabase, Class, Teacher, Student } from '@/lib/supabase';
 import { ClassModal, ClassFormData } from '@/components/calendar/ClassModal';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
@@ -62,6 +63,7 @@ const AdminCalendar: React.FC = () => {
 
     const [date, setDate] = useState(new Date());
     const [view, setView] = useState<View>('week');
+    const [searchQuery, setSearchQuery] = useState('');
 
     // Track the currently visible range to fetch only what's needed
     const [currentRange, setCurrentRange] = useState<{ start: Date; end: Date }>({
@@ -157,11 +159,12 @@ const AdminCalendar: React.FC = () => {
                     }
                     if (color === '#3788d8') {
                         const tName = cls.title || '';
-                        const parts = tName.split('-');
-                        const lastPart = parts[parts.length - 1] || tName;
-                        let t = currentTeachers.find(t => lastPart.toLowerCase().includes(t.name.toLowerCase()));
-                        if (!t) t = currentTeachers.find(t => tName.toLowerCase().includes(t.name.toLowerCase()));
-                        if (t) color = t.color;
+                        if (tName.includes('-')) {
+                            const parts = tName.split('-');
+                            const lastPart = parts[parts.length - 1].trim();
+                            let t = currentTeachers.find(t => lastPart.toLowerCase().includes(t.name.toLowerCase()));
+                            if (t) color = t.color;
+                        }
                     }
                 }
 
@@ -444,6 +447,7 @@ const AdminCalendar: React.FC = () => {
                 timezone: formData.timezone,
                 link_url: link_url,
                 class_level: 'Mixed',
+                teacher_id: formData.teacher_id,
                 event_id: formData.event_id || `calc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, // Ensure event_id
             });
 
@@ -530,17 +534,23 @@ const AdminCalendar: React.FC = () => {
                     
                     const toUpdate: any[] = [];
                     const toDelete: any[] = [];
-                    const toAdd = [...selectedStudentNames];
+                    
+                    // Keep track of students as objects to maintain strict alignment of name and ID
+                    const toAdd = formData.student_ids.map(id => {
+                        const student = students.find(s => s.id === id);
+                        return { id, name: student ? student.student_name : 'Unknown Student' };
+                    });
+                    if (toAdd.length === 0) {
+                        toAdd.push({ id: '', name: 'Unknown Student' });
+                    }
                     
                     existingRows.forEach(row => {
-                         // Fallback for legacy comma-separated rows: split and take the first name
                          const primaryName = row.student_name.split(',')[0].trim();
-                         // Check if this existing row's primary student is still selected
-                         const matchedIndex = toAdd.findIndex(name => name.toLowerCase() === primaryName.toLowerCase());
+                         const matchedIndex = toAdd.findIndex(student => student.name.toLowerCase().trim() === primaryName.toLowerCase());
                          if (matchedIndex !== -1) {
-                             const exactName = toAdd[matchedIndex];
-                             toUpdate.push({ id: row.id, student_name: exactName });
-                             toAdd.splice(matchedIndex, 1); // Remove from toAdd so we don't insert a duplicate
+                             const exactStudent = toAdd[matchedIndex];
+                             toUpdate.push({ id: row.id, student_name: exactStudent.name });
+                             toAdd.splice(matchedIndex, 1);
                          } else {
                              toDelete.push(row);
                          }
@@ -564,6 +574,7 @@ const AdminCalendar: React.FC = () => {
                                 time: formData.start_time,
                                 timezone: formData.timezone,
                                 link_url: link_url,
+                                teacher_id: formData.teacher_id,
                                 event_id: targetEventId
                             }).eq('id', row.id);
                             if (error) throw error;
@@ -573,7 +584,10 @@ const AdminCalendar: React.FC = () => {
                     // Add new students ONE BY ONE to prevent sequence duplication issues
                     if (toAdd.length > 0) {
                         const newAssignments: any[] = [];
-                        for (const name of toAdd) {
+                        for (const student of toAdd) {
+                            const name = student.name;
+                            const studentId = student.id; // Use exact ID
+
                             const payload = createPayload(targetDate, name);
                             payload.event_id = targetEventId;
                             
@@ -582,15 +596,21 @@ const AdminCalendar: React.FC = () => {
                             
                             if (inserted && inserted.length > 0) {
                                 const cls = inserted[0];
-                                const matchingStudent = students.find(s => s.student_name === cls.student_name);
-                                if (matchingStudent) {
-                                    newAssignments.push({ class_id: cls.id, student_id: matchingStudent.id });
+                                if (studentId) {
+                                    newAssignments.push({ class_id: cls.id, student_id: studentId });
+                                } else {
+                                    // Fallback if somehow ID is missing
+                                    const matchingStudent = students.find(s => s.student_name === cls.student_name);
+                                    if (matchingStudent) {
+                                        newAssignments.push({ class_id: cls.id, student_id: matchingStudent.id });
+                                    }
                                 }
                             }
                         }
                         
                         if (newAssignments.length > 0) {
-                            await supabase.from('class_assignments').insert(newAssignments);
+                            const { error: assignError } = await supabase.from('class_assignments').insert(newAssignments);
+                            if (assignError) throw assignError;
                         }
                     }
                 };
@@ -858,14 +878,20 @@ const AdminCalendar: React.FC = () => {
         const isBruno = teacher?.name?.toLowerCase().includes('bruno') ||
             (!teacher && cls.title?.toLowerCase().includes('bruno'));
 
+        // Check if matches search
+        const isMatch = !searchQuery || 
+            cls.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+            cls.student_name?.toLowerCase().includes(searchQuery.toLowerCase());
+
         return {
             style: {
                 backgroundColor: color,
                 borderRadius: '4px',
-                opacity: 1, // Force solid opacity (no transparency)
-                border: 'none',
+                opacity: isMatch ? 1 : 0.3,
+                border: isMatch && searchQuery ? '2px solid black' : 'none',
                 color: isBruno ? 'black' : 'white',
-                display: 'block'
+                display: 'block',
+                boxShadow: isMatch && searchQuery ? '0 0 5px rgba(0,0,0,0.5)' : 'none'
             }
         };
     };
@@ -877,7 +903,13 @@ const AdminCalendar: React.FC = () => {
                     <h1 className="text-2xl font-bold">Admin Calendar</h1>
                     <p className="text-muted-foreground">Manage schedule by dragging and dropping</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                        placeholder="Search student or class..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-48 bg-white"
+                    />
                     {teachers.length === 0 && !loading && (
                         <Button variant="outline" onClick={initializeTeachers} className="border-yellow-500 text-yellow-600 hover:bg-yellow-50">
                             ⚠ Initialize Teachers

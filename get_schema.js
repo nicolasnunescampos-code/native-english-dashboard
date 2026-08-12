@@ -4,7 +4,9 @@ const supabase = createClient('https://ibykhkbyzifddwnsfxxy.supabase.co', 'eyJhb
 
 async function run() {
   const { data, error } = await supabase.rpc('get_schema');
-  // I'll just look at the postgres columns table or supabase dashboard.
-  // Actually, we don't have direct DB access. But maybe we can fetch from information_schema via RPC if available? No.
+  console.log("Error:", error);
+  if (data) {
+    console.log(JSON.stringify(data, null, 2).substring(0, 5000));
+  }
 }
 run();

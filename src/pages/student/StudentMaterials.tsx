@@ -20,12 +20,13 @@ const CATEGORIES = [
   { key: "Grammar", label: "Grammar" },
   { key: "Entertainment", label: "Entertainment" },
   { key: "Club", label: "Conversation Club" },
-  { key: "business", label: "Business" },
 ]
 
 const StudentMaterials = () => {
   const [materials, setMaterials] = useState<Material[]>([])
   const [activeCategory, setActiveCategory] = useState("Grammar")
+  const [activeSubCategory, setActiveSubCategory] = useState<"Reading" | "Listening">("Reading")
+  const [activeClubSubCategory, setActiveClubSubCategory] = useState<"Reading" | "Listening">("Reading")
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -45,11 +46,33 @@ const StudentMaterials = () => {
     loadMaterials()
   }, [])
 
-  const filtered = materials.filter(
-    (m) => m.category && 
-           m.category.toLowerCase() === activeCategory.toLowerCase() && 
-           m.target_audience?.toLowerCase() !== 'teacher'
-  )
+  const filtered = materials
+    .filter(
+      (m) => {
+        if (!m.category || m.target_audience?.toLowerCase() === 'teacher') return false;
+        if (activeCategory === "Entertainment") {
+          const targetCat = activeSubCategory;
+          return m.category.toLowerCase() === targetCat.toLowerCase();
+        }
+        if (activeCategory === "Club") {
+          const targetCat = `Club (${activeClubSubCategory})`;
+          return m.category.toLowerCase() === targetCat.toLowerCase();
+        }
+        return m.category.toLowerCase() === activeCategory.toLowerCase();
+      }
+    )
+    .sort((a, b) => {
+      const getLevelScore = (title: string) => {
+        const t = title.toLowerCase();
+        if (t.includes('beginner')) return 1;
+        if (t.includes('intermediate')) return 2;
+        if (t.includes('advanced (1)') || t.includes('advanced 1')) return 3;
+        if (t.includes('advanced (2)') || t.includes('advanced 2')) return 4;
+        if (t.includes('advanced')) return 3;
+        return 5;
+      };
+      return getLevelScore(a.title) - getLevelScore(b.title);
+    });
 
   if (loading) {
     return <p className="text-muted-foreground">Loading materials...</p>
@@ -57,7 +80,7 @@ const StudentMaterials = () => {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">📚 Learning Materials</h2>
+      <h2 className="text-xl font-semibold">📚 Books</h2>
 
       {/* Category Tabs */}
       <div className="flex gap-2 flex-wrap">
@@ -71,6 +94,47 @@ const StudentMaterials = () => {
           </Button>
         ))}
       </div>
+
+      {/* Secondary Tabs for Entertainment */}
+      {activeCategory === "Entertainment" && (
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant={activeSubCategory === "Reading" ? "secondary" : "outline"}
+            onClick={() => setActiveSubCategory("Reading")}
+          >
+            📖 Reading
+          </Button>
+          <Button
+            size="sm"
+            variant={activeSubCategory === "Listening" ? "secondary" : "outline"}
+            onClick={() => setActiveSubCategory("Listening")}
+          >
+            🎧 Listening
+          </Button>
+        </div>
+      )}
+
+
+      {/* Secondary Tabs for Club */}
+      {activeCategory === "Club" && (
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant={activeClubSubCategory === "Reading" ? "secondary" : "outline"}
+            onClick={() => setActiveClubSubCategory("Reading")}
+          >
+            📖 Reading
+          </Button>
+          <Button
+            size="sm"
+            variant={activeClubSubCategory === "Listening" ? "secondary" : "outline"}
+            onClick={() => setActiveClubSubCategory("Listening")}
+          >
+            🎧 Listening
+          </Button>
+        </div>
+      )}
 
       {/* Materials */}
       {filtered.length === 0 ? (
@@ -115,91 +179,8 @@ const StudentMaterials = () => {
           ))}
         </div>
       )}
-
-      {/* Audio Section */}
-      <div className="mt-12 pt-8 border-t">
-        <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-          🎧 Audio Materials
-        </h2>
-        <AudioMaterialsList />
-      </div>
     </div>
   )
 }
-
-const AudioMaterialsList = () => {
-  const [audios, setAudios] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeCategory, setActiveCategory] = useState("Beginner");
-
-  const CATEGORIES = ["Beginner", "Intermediate", "Advanced 1", "Advanced 2"];
-
-  useEffect(() => {
-    const fetchAudios = async () => {
-      const { data } = await supabase
-        .from('audios')
-        .select('*')
-        .order('id', { ascending: true });
-      setAudios(data || []);
-      setLoading(false);
-    };
-    fetchAudios();
-  }, []);
-
-  const filteredAudios = audios.filter(audio =>
-    (audio.category || "Beginner") === activeCategory
-  );
-
-  if (loading) return <p className="text-muted-foreground">Loading audios...</p>;
-
-  return (
-    <div className="space-y-6">
-      {/* Category Tabs */}
-      <div className="flex gap-2 flex-wrap">
-        {CATEGORIES.map((cat) => (
-          <Button
-            key={cat}
-            variant={activeCategory === cat ? "default" : "outline"}
-            onClick={() => setActiveCategory(cat)}
-            size="sm"
-          >
-            {cat}
-          </Button>
-        ))}
-      </div>
-
-      {filteredAudios.length === 0 ? (
-        <Card>
-          <CardContent className="p-6 text-center text-muted-foreground">
-            No audio materials available for {activeCategory}.
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4">
-          {filteredAudios.map((audio) => (
-            <Card key={audio.id} className="hover:shadow-sm transition-shadow">
-              <CardContent className="p-4 flex flex-col sm:flex-row gap-4 items-center">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-primary">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-play"><polygon points="6 3 20 12 6 21 6 3" /></svg>
-                </div>
-                <div className="flex-1 text-center sm:text-left">
-                  <h3 className="font-medium">{audio.title}</h3>
-                  {audio.description && (
-                    <p className="text-sm text-muted-foreground">
-                      {audio.description}
-                    </p>
-                  )}
-                </div>
-                <div className="w-full sm:w-auto">
-                  <audio controls src={audio.url} className="w-full sm:w-64 h-8" />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
 
 export default StudentMaterials

@@ -28,6 +28,7 @@ import {
   LayoutDashboard,
   TrendingUp,
   GraduationCap,
+  Bot
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ModeToggle } from '@/components/mode-toggle'
@@ -43,11 +44,20 @@ const studentNavItems: NavItem[] = [
   { label: 'Home', path: '/student', icon: <Home className="h-5 w-5" /> },
   { label: 'Classes', path: '/student/classes', icon: <Calendar className="h-5 w-5" /> },
   { label: 'Exams', path: '/student/exams', icon: <GraduationCap className="h-5 w-5" /> },
-  { label: 'Materials', path: '/student/materials', icon: <BookOpen className="h-5 w-5" /> },
+  { label: 'Native Buddy', path: '/student/buddy', icon: <Bot className="h-5 w-5" /> },
+  { 
+    label: 'Materials', 
+    path: '#materials', 
+    icon: <BookOpen className="h-5 w-5" />,
+    subItems: [
+      { label: 'Books', path: '/student/materials', icon: <BookOpen className="h-5 w-5" /> },
+      { label: 'Videos', path: '/student/videos', icon: <Play className="h-5 w-5" /> },
+      { label: 'Audios', path: '/student/audios', icon: <Megaphone className="h-5 w-5" /> },
+    ]
+  },
   { label: 'History', path: '/student/history', icon: <History className="h-5 w-5" /> },
   { label: 'Reports', path: '/student/reports', icon: <FileText className="h-5 w-5" /> },
   { label: 'Messages', path: '/student/messages', icon: <MessageSquare className="h-5 w-5" /> },
-  { label: 'Videos', path: '/student/videos', icon: <Play className="h-5 w-5" /> },
   { label: 'Announcements', path: '/student/announcements', icon: <Megaphone className="h-5 w-5" /> },
   { label: 'Rules', path: '/student/rules', icon: <ScrollText className="h-5 w-5" /> },
   { label: 'Payments', path: '/student/payments', icon: <CreditCard className="h-5 w-5" /> },
@@ -57,14 +67,22 @@ const studentNavItems: NavItem[] = [
 
 const teacherNavItems: NavItem[] = [
   { label: 'Home', path: '/teacher', icon: <Home className="h-5 w-5" /> },
-  { label: 'Weekly Schedule', path: '/teacher/schedule', icon: <Calendar className="h-5 w-5" /> },
-  { label: 'Calendar', path: '/teacher/calendar', icon: <Calendar className="h-5 w-5" /> },
+  { label: 'Classes', path: '/teacher/schedule', icon: <Calendar className="h-5 w-5" /> },
   // { label: 'Grade Classes', path: '/teacher/grade', icon: <Edit className="h-5 w-5" /> },
   { label: 'Students', path: '/teacher/students', icon: <Users className="h-5 w-5" /> },
-  { label: 'Materials', path: '/teacher/materials', icon: <BookOpen className="h-5 w-5" /> },
-  { label: 'Videos', path: '/teacher/videos', icon: <Play className="h-5 w-5" /> },
+  { 
+    label: 'Materials', 
+    path: '#materials', 
+    icon: <BookOpen className="h-5 w-5" />,
+    subItems: [
+      { label: 'Books', path: '/teacher/materials', icon: <BookOpen className="h-5 w-5" /> },
+      { label: 'Videos', path: '/teacher/videos', icon: <Play className="h-5 w-5" /> },
+      { label: 'Audios', path: '/teacher/audios', icon: <Megaphone className="h-5 w-5" /> },
+    ]
+  },
   { label: 'Messages', path: '/teacher/messages', icon: <MessageSquare className="h-5 w-5" /> },
   { label: 'Rules', path: '/teacher/rules', icon: <ScrollText className="h-5 w-5" /> },
+  { label: 'Profile', path: '/teacher/profile', icon: <User className="h-5 w-5" /> },
 ]
 
 const adminNavItems: NavItem[] = [
@@ -92,6 +110,7 @@ const adminNavItems: NavItem[] = [
     icon: <Film className="h-5 w-5" />,
     subItems: [
       { label: 'Materials', path: '/admin/materials', icon: <BookOpen className="h-5 w-5" /> },
+      { label: 'Worksheets', path: '/admin/worksheets', icon: <FileText className="h-5 w-5" /> },
       { label: 'Videos', path: '/admin/videos', icon: <Play className="h-5 w-5" /> },
       { label: 'Audios', path: '/admin/audios', icon: <Megaphone className="h-5 w-5" /> },
     ]
