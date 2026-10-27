@@ -1,11 +1,19 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Calendar, dateFnsLocalizer, Event as CalendarEvent, View } from 'react-big-calendar';
 import withDragAndDrop from 'react-big-calendar/lib/addons/dragAndDrop';
-import { format, parse, startOfWeek, endOfWeek, getDay, addWeeks } from 'date-fns';
+import { format, parse, startOfWeek, endOfWeek, getDay, addWeeks, addDays, nextFriday, isFriday } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import { fromZonedTime, formatInTimeZone } from 'date-fns-tz';
 import { supabase, Class, Teacher, Student } from '@/lib/supabase';
 import { ClassModal, ClassFormData } from '@/components/calendar/ClassModal';
+import { UnscheduledRecuperationsTray } from '@/components/calendar/UnscheduledRecuperationsTray';
+import { 
+    PendingRecuperationItem, 
+    syncRecuperationsStatus, 
+    grantRecuperationCredit, 
+    linkRecuperationToScheduledClass,
+    fetchPendingRecuperations
+} from '@/utils/recuperationSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
@@ -54,6 +62,7 @@ const AdminCalendar: React.FC = () => {
     const [events, setEvents] = useState<CalendarClassEvent[]>([]);
     const [teachers, setTeachers] = useState<Teacher[]>([]);
     const [students, setStudents] = useState<Student[]>([]);
+    const [pendingRecuperations, setPendingRecuperations] = useState<PendingRecuperationItem[]>([]);
     const [loading, setLoading] = useState(true);
 
     // Modal State
@@ -70,6 +79,15 @@ const AdminCalendar: React.FC = () => {
         start: startOfWeek(new Date()),
         end: endOfWeek(new Date())
     });
+
+    const loadPendingRecuperations = async () => {
+        try {
+            const enriched = await fetchPendingRecuperations();
+            setPendingRecuperations(enriched);
+        } catch (err: any) {
+            console.error('Failed to load pending recuperations:', err);
+        }
+    };
 
     const fetchReferenceData = async () => {
         // Fetch Teachers
@@ -227,8 +245,21 @@ const AdminCalendar: React.FC = () => {
             const fetchedTeachers = await fetchReferenceData();
             // Initial load for current week
             fetchClasses(currentRange.start, currentRange.end, fetchedTeachers);
+            loadPendingRecuperations();
         };
         init();
+
+        // Subscribe to realtime updates on recuperation_classes
+        const channel = supabase
+            .channel('admin_calendar_recuperations_realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'recuperation_classes' }, () => {
+                loadPendingRecuperations();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     // Re-fetch when range changes (and teachers are loaded to ensure colors)
@@ -283,6 +314,107 @@ const AdminCalendar: React.FC = () => {
     // ─────────────────────────────────────────────────────────────
     // HANDLERS
     // ─────────────────────────────────────────────────────────────
+
+    const handleScheduleFromTray = (item: PendingRecuperationItem) => {
+        const today = new Date();
+        const defaultDate = isFriday(today) ? addDays(today, 7) : nextFriday(today);
+        const defaultDateStr = format(defaultDate, 'yyyy-MM-dd');
+
+        const student = students.find(s => s.id === item.student_id);
+        const studentName = student?.student_name || item.student_name;
+
+        setSelectedEvent({
+            title: `[Extra Class] ${studentName}'s class`,
+            date: defaultDateStr,
+            start_time: '10:00',
+            end_time: '10:50',
+            timezone: 'America/Sao_Paulo',
+            teacher_id: '',
+            student_ids: [item.student_id],
+            status: 'published',
+            recuperation_id: item.id,
+        });
+        setIsModalOpen(true);
+    };
+
+    const handleDismissFromTray = async (item: PendingRecuperationItem) => {
+        if (!confirm(`Mark recuperation for ${item.student_name} as resolved?`)) return;
+        try {
+            await supabase
+                .from('recuperation_classes')
+                .update({ 
+                    status: 'completed', 
+                    notes: `${item.notes || ''} — [Dismissed/Resolved by admin]` 
+                })
+                .eq('id', item.id);
+            toast({ title: 'Recuperation resolved', description: `Marked completed for ${item.student_name}` });
+            loadPendingRecuperations();
+        } catch (err: any) {
+            toast({ title: 'Error', description: err.message, variant: 'destructive' });
+        }
+    };
+
+    const handleCourtesyReschedule = async (data: ClassFormData, scheduleNow: boolean) => {
+        if (!data.id) return;
+        setModalLoading(true);
+
+        try {
+            const studentId = data.student_ids[0];
+            const student = students.find(s => s.id === studentId);
+            const studentName = student?.student_name || 'Student';
+
+            // 1. Delete the original cancelled class
+            const { error: deleteErr } = await supabase.from('classes').delete().eq('id', data.id);
+            if (deleteErr) throw deleteErr;
+
+            // 2. Grant recuperation credit in DB
+            const res = await grantRecuperationCredit({
+                studentId,
+                studentName,
+                originalDate: data.date,
+                originalTime: data.start_time,
+                reason: 'Courtesy reschedule by admin',
+            });
+
+            if (!res.success) {
+                throw new Error(res.error || 'Failed to grant recuperation credit');
+            }
+
+            toast({
+                title: 'Courtesy credit granted',
+                description: `Cancelled class for ${studentName} and added 1 recuperation credit.`,
+            });
+
+            // 3. Either slot now or send to staging tray
+            if (scheduleNow && res.data?.id) {
+                const today = new Date();
+                const defaultDate = isFriday(today) ? addDays(today, 7) : nextFriday(today);
+
+                setSelectedEvent({
+                    title: `[Extra Class] ${studentName}'s class`,
+                    date: format(defaultDate, 'yyyy-MM-dd'),
+                    start_time: '10:00',
+                    end_time: '10:50',
+                    timezone: data.timezone || 'America/Sao_Paulo',
+                    teacher_id: data.teacher_id || '',
+                    student_ids: [studentId],
+                    status: 'published',
+                    recuperation_id: res.data.id,
+                });
+                setIsModalOpen(true);
+            } else {
+                setIsModalOpen(false);
+                setSelectedEvent(null);
+            }
+
+            fetchClasses(currentRange.start, currentRange.end);
+            loadPendingRecuperations();
+        } catch (err: any) {
+            toast({ title: 'Error', description: err.message, variant: 'destructive' });
+        } finally {
+            setModalLoading(false);
+        }
+    };
 
     const handleSelectSlot = ({ start, end }: { start: Date; end: Date }) => {
         setSelectedEvent({
@@ -363,7 +495,7 @@ const AdminCalendar: React.FC = () => {
             student_ids: studentIds,
             status: cls.status || 'published',
             event_id: cls.event_id, // Pass for recurrence logic
-            merged_ids: (cls as any).merged_ids || [cls.id],
+            merged_ids: ((cls as any).merged_ids || [cls.id]).filter((id: any) => id != null),
         });
         setIsModalOpen(true);
     };
@@ -514,6 +646,18 @@ const AdminCalendar: React.FC = () => {
                     }
                 }
 
+                if (formData.recuperation_id && insertedClasses.length > 0) {
+                    const primaryClass = insertedClasses[0];
+                    await linkRecuperationToScheduledClass({
+                        recuperationId: formData.recuperation_id,
+                        classId: primaryClass.id,
+                        classDate: formData.date,
+                        classTime: formData.start_time,
+                        teacherName: teacher?.name,
+                    });
+                    loadPendingRecuperations();
+                }
+
             }
             // ─────────────────────────────────────────────────────────────
             // CASE 2: EDIT EXISTING CLASS
@@ -529,8 +673,13 @@ const AdminCalendar: React.FC = () => {
                         query = query.eq('event_id', targetEventId).eq('date', targetDate);
                     }
                     
-                    const { data: existingRows } = await query;
-                    if (!existingRows || existingRows.length === 0) return;
+                    const { data: existingRows, error: queryError } = await query;
+                    if (queryError) {
+                        console.error("Query Error in syncGroupForDate:", queryError);
+                        throw new Error(`Failed to fetch existing classes: ${queryError.message}`);
+                    }
+                    
+                    const rowsToProcess = existingRows || [];
                     
                     const toUpdate: any[] = [];
                     const toDelete: any[] = [];
@@ -544,7 +693,7 @@ const AdminCalendar: React.FC = () => {
                         toAdd.push({ id: '', name: 'Unknown Student' });
                     }
                     
-                    existingRows.forEach(row => {
+                    rowsToProcess.forEach(row => {
                          const primaryName = row.student_name.split(',')[0].trim();
                          const matchedIndex = toAdd.findIndex(student => student.name.toLowerCase().trim() === primaryName.toLowerCase());
                          if (matchedIndex !== -1) {
@@ -712,9 +861,27 @@ const AdminCalendar: React.FC = () => {
                         }
                     }
                 }
+
+                if (formData.recuperation_id && formData.id) {
+                    await linkRecuperationToScheduledClass({
+                        recuperationId: formData.recuperation_id,
+                        classId: formData.id,
+                        classDate: formData.date,
+                        classTime: formData.start_time,
+                        teacherName: teacher?.name,
+                    });
+                    loadPendingRecuperations();
+                }
             }
 
-            toast({ title: 'Success', description: 'Schedule updated successfully' });
+            if (formData.recuperation_id) {
+                toast({
+                    title: 'Extra Class Scheduled!',
+                    description: `Scheduled for ${formData.date} at ${formData.start_time}. Remember to add it to your personal Google Calendar!`,
+                });
+            } else {
+                toast({ title: 'Success', description: 'Schedule updated successfully' });
+            }
             setIsModalOpen(false);
             fetchClasses(currentRange.start, currentRange.end);
 
@@ -926,6 +1093,15 @@ const AdminCalendar: React.FC = () => {
                 </div>
             </div>
 
+            {/* UNSCHEDULED RECUPERATIONS STAGING TRAY */}
+            <UnscheduledRecuperationsTray
+                pendingRecuperations={pendingRecuperations}
+                loading={loading}
+                onSchedule={handleScheduleFromTray}
+                onDismiss={handleDismissFromTray}
+                onRefresh={loadPendingRecuperations}
+            />
+
             <div className="flex-1 bg-background rounded-lg shadow border p-4">
                 <DnDCalendar
                     localizer={localizer}
@@ -966,6 +1142,7 @@ const AdminCalendar: React.FC = () => {
                 loading={modalLoading}
                 onDelete={selectedEvent?.id ? handleDeleteClass : undefined}
                 onDuplicate={selectedEvent?.id ? handleDuplicate : undefined}
+                onCourtesyReschedule={selectedEvent?.id ? handleCourtesyReschedule : undefined}
                 isSeries={selectedEvent?.event_id ? events.filter(e => e.resource.event_id === selectedEvent.event_id).length > 1 : false}
             />
         </div >

@@ -29,10 +29,11 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
-import { Check, ChevronsUpDown, X } from 'lucide-react';
+import { Check, ChevronsUpDown, X, Calendar as CalendarIcon, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Teacher, Student } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
+import { openGoogleCalendarEvent } from '@/utils/googleCalendar';
 
 export interface ClassFormData {
     id?: number;
@@ -51,6 +52,8 @@ export interface ClassFormData {
     edit_mode?: 'single' | 'following' | 'all';
     event_id?: string; // To track if it belongs to a series
     merged_ids?: number[]; // Track all IDs belonging to this group
+    recuperation_id?: string; // Linked recuperation credit
+    class_type?: string;
 }
 
 export interface ClassFormProps {
@@ -63,6 +66,7 @@ export interface ClassFormProps {
     loading?: boolean;
     onDelete?: () => void;
     onDuplicate?: (data: ClassFormData) => void; // New prop
+    onCourtesyReschedule?: (data: ClassFormData, scheduleNow: boolean) => void; // Courtesy reschedule
     isSeries?: boolean; // New prop
 }
 
@@ -76,6 +80,7 @@ export const ClassModal: React.FC<ClassFormProps> = ({
     loading = false,
     onDelete,
     onDuplicate,
+    onCourtesyReschedule,
     isSeries = false,
 }) => {
     const [formData, setFormData] = useState<ClassFormData>({
@@ -93,12 +98,14 @@ export const ClassModal: React.FC<ClassFormProps> = ({
     });
 
     const [openStudentSelect, setOpenStudentSelect] = useState(false);
+    const [showCourtesyConfirm, setShowCourtesyConfirm] = useState(false);
 
     const showRecurrenceOptions = !initialData || (initialData && !isSeries);
     const showEditModes = initialData && isSeries;
 
     useEffect(() => {
         if (open) {
+            setShowCourtesyConfirm(false);
             if (initialData) {
                 setFormData({
                     ...initialData,
@@ -106,6 +113,7 @@ export const ClassModal: React.FC<ClassFormProps> = ({
                     is_recurring: initialData.is_recurring ?? false,
                     edit_mode: initialData.edit_mode || 'single',
                     repeat_until: initialData.repeat_until || '',
+                    recuperation_id: initialData.recuperation_id,
                 });
             } else {
                 // Reset form for new entry
@@ -144,18 +152,21 @@ export const ClassModal: React.FC<ClassFormProps> = ({
             studentPart = `${namesCopy.join(', ')} and ${last}'s class`;
         }
 
+        const isRecuperation = !!formData.recuperation_id || (formData.title && formData.title.includes('Extra Class'));
+        if (isRecuperation && !studentPart.startsWith('[Extra Class]')) {
+            studentPart = `[Extra Class] ${studentPart}`;
+        }
+
         const teacherPart = teacher ? ` - ${teacher.name}` : '';
         const newTitle = `${studentPart}${teacherPart}`;
 
         // Only update if it's a new class OR the user hasn't manually changed the title
-        // We assume if the current title matches the standard format of ANY combination of students/teachers, it's safe to update.
-        // For simplicity, let's just always update it if it ends with "class" or "class - TeacherName", meaning it's a standard title.
         const isStandardTitle = formData.title === '' || formData.title.includes('class');
         
         if (!initialData || isStandardTitle) {
             setFormData(prev => ({ ...prev, title: newTitle }));
         }
-    }, [formData.teacher_id, formData.student_ids, teachers, students]);
+    }, [formData.teacher_id, formData.student_ids, formData.recuperation_id, teachers, students]);
 
     const handleSubmit = () => {
         onSubmit(formData);
@@ -189,8 +200,13 @@ export const ClassModal: React.FC<ClassFormProps> = ({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-lg">
                 <DialogHeader>
-                    <DialogTitle>
-                        {initialData ? 'Edit Class' : 'Schedule New Class'}
+                    <DialogTitle className="flex items-center gap-2">
+                        {formData.recuperation_id ? (
+                            <Badge className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs py-0.5">
+                                🔄 Extra Class Scheduling
+                            </Badge>
+                        ) : null}
+                        <span>{initialData ? 'Edit Class' : 'Schedule New Class'}</span>
                     </DialogTitle>
                 </DialogHeader>
 
@@ -431,34 +447,129 @@ export const ClassModal: React.FC<ClassFormProps> = ({
                         )}
                     </div>
 
+                    {/* COURTESY RESCHEDULE CONFIRMATION ALERT */}
+                    {showCourtesyConfirm && (
+                        <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/40 p-4 space-y-3">
+                            <div className="flex items-start gap-2.5">
+                                <RotateCcw className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                                <div>
+                                    <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                                        Reschedule as Courtesy
+                                    </h4>
+                                    <p className="text-xs text-amber-800/80 dark:text-amber-300/80 mt-0.5">
+                                        This will cancel this class and grant a recuperation credit to this student. How would you like to handle the makeup class?
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                                <Button
+                                    size="sm"
+                                    variant="default"
+                                    className="bg-amber-600 hover:bg-amber-700 text-white text-xs h-8"
+                                    onClick={() => {
+                                        if (onCourtesyReschedule) {
+                                            onCourtesyReschedule(formData, true);
+                                        }
+                                        setShowCourtesyConfirm(false);
+                                    }}
+                                >
+                                    Slot Makeup Class Now
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-amber-300 text-amber-900 dark:text-amber-200 text-xs hover:bg-amber-100 h-8"
+                                    onClick={() => {
+                                        if (onCourtesyReschedule) {
+                                            onCourtesyReschedule(formData, false);
+                                        }
+                                        setShowCourtesyConfirm(false);
+                                        onOpenChange(false);
+                                    }}
+                                >
+                                    Send to Staging Tray (Later)
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-xs h-8 ml-auto text-muted-foreground"
+                                    onClick={() => setShowCourtesyConfirm(false)}
+                                >
+                                    Cancel
+                                </Button>
+                            </div>
+                        </div>
+                    )}
 
                 </div>
 
-                <DialogFooter className="gap-2 sm:gap-0">
+                <DialogFooter className="gap-2 sm:gap-1 flex-wrap">
                     {initialData && onDelete && (
                         <Button
                             variant="destructive"
                             onClick={onDelete}
                             className="mr-auto"
                             type="button"
+                            size="sm"
                         >
                             Delete
+                        </Button>
+                    )}
+                    {initialData && onCourtesyReschedule && !showCourtesyConfirm && (
+                        <Button
+                            variant="outline"
+                            onClick={() => setShowCourtesyConfirm(true)}
+                            className="mr-1 border-amber-300 bg-amber-50/50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/20 dark:text-amber-300 dark:border-amber-800 text-xs"
+                            type="button"
+                            size="sm"
+                        >
+                            <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                            Courtesy Reschedule
+                        </Button>
+                    )}
+                    {formData.date && formData.start_time && (
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                const teacher = teachers.find(t => t.id === formData.teacher_id);
+                                const studentNames = students
+                                    .filter(s => formData.student_ids.includes(s.id))
+                                    .map(s => s.student_name)
+                                    .join(', ');
+
+                                openGoogleCalendarEvent({
+                                    title: formData.title || `${studentNames || 'Student'}'s class`,
+                                    date: formData.date,
+                                    startTime: formData.start_time || '10:00',
+                                    endTime: formData.end_time || '10:50',
+                                    timezone: formData.timezone || 'America/Sao_Paulo',
+                                    description: `Teacher: ${teacher?.name || 'TBD'}\nStudent: ${studentNames || 'Student'}\nMeet Link: ${teacher?.meet_link || ''}${formData.recuperation_id ? '\n[Recuperation Class]' : ''}`,
+                                    location: teacher?.meet_link || '',
+                                });
+                            }}
+                            className="mr-1 border-sky-300 text-sky-700 hover:bg-sky-50 dark:border-sky-800 dark:text-sky-300 text-xs"
+                            type="button"
+                            size="sm"
+                        >
+                            <CalendarIcon className="h-3.5 w-3.5 mr-1" />
+                            Add to GCal
                         </Button>
                     )}
                     {initialData && onDuplicate && (
                         <Button
                             variant="secondary"
                             onClick={() => onDuplicate(formData)}
-                            className="mr-2"
+                            className="mr-1 text-xs"
                             type="button"
+                            size="sm"
                         >
                             Duplicate
                         </Button>
                     )}
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                    <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
                         Cancel
                     </Button>
-                    <Button onClick={handleSubmit} disabled={loading}>
+                    <Button onClick={handleSubmit} size="sm" disabled={loading}>
                         {loading ? 'Saving...' : 'Save Class'}
                     </Button>
                 </DialogFooter>

@@ -1,25 +1,26 @@
 import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabase"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { AUDIO_CATEGORIES, ExtendedAudio, fetchAllAudios } from "@/lib/audioCatalog"
+import { Play } from "lucide-react"
 
 const StudentAudios = () => {
-  const [audios, setAudios] = useState<any[]>([]);
+  const [audios, setAudios] = useState<ExtendedAudio[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeCategory, setActiveCategory] = useState("Beginner");
-
-  const CATEGORIES = ["Beginner", "Intermediate", "Advanced 1", "Advanced 2"];
+  const [activeCategory, setActiveCategory] = useState<string>("Beginner");
 
   useEffect(() => {
-    const fetchAudios = async () => {
-      const { data } = await supabase
-        .from('audios')
-        .select('*')
-        .order('id', { ascending: true });
-      setAudios(data || []);
-      setLoading(false);
+    const loadAudios = async () => {
+      try {
+        const data = await fetchAllAudios();
+        // Order ascending by id for students so chapters appear in natural order
+        const sorted = [...data].sort((a, b) => (a.id || 0) - (b.id || 0));
+        setAudios(sorted);
+      } finally {
+        setLoading(false);
+      }
     };
-    fetchAudios();
+    loadAudios();
   }, []);
 
   const filteredAudios = audios.filter(audio =>
@@ -36,7 +37,7 @@ const StudentAudios = () => {
 
       {/* Category Tabs */}
       <div className="flex gap-2 flex-wrap">
-        {CATEGORIES.map((cat) => (
+        {AUDIO_CATEGORIES.map((cat) => (
           <Button
             key={cat}
             variant={activeCategory === cat ? "default" : "outline"}
@@ -57,10 +58,10 @@ const StudentAudios = () => {
       ) : (
         <div className="grid gap-4">
           {filteredAudios.map((audio) => (
-            <Card key={audio.id} className="hover:shadow-sm transition-shadow">
+            <Card key={audio.id || audio.url} className="hover:shadow-sm transition-shadow">
               <CardContent className="p-4 flex flex-col sm:flex-row gap-4 items-center">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-primary">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-play"><polygon points="6 3 20 12 6 21 6 3" /></svg>
+                <div className="h-12 w-12 rounded-full bg-sky-500/15 flex items-center justify-center shrink-0 text-sky-600 dark:text-sky-400">
+                  <Play className="h-6 w-6 ml-1" />
                 </div>
                 <div className="flex-1 text-center sm:text-left">
                   <h3 className="font-medium">{audio.title}</h3>

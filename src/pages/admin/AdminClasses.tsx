@@ -1,9 +1,18 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { format, addDays, parseISO } from 'date-fns'
+import { format, addDays, parseISO, nextFriday, isFriday } from 'date-fns'
 import { fromZonedTime } from 'date-fns-tz'
-import { Check, ChevronsUpDown } from "lucide-react"
+import { Check, ChevronsUpDown, Calendar as CalendarIcon, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { UnscheduledRecuperationsTray } from '@/components/calendar/UnscheduledRecuperationsTray'
+import { 
+  PendingRecuperationItem, 
+  syncRecuperationsStatus, 
+  grantRecuperationCredit, 
+  linkRecuperationToScheduledClass,
+  fetchPendingRecuperations
+} from '@/utils/recuperationSync'
+import { openGoogleCalendarEvent } from '@/utils/googleCalendar'
 
 import {
   Table,
@@ -82,6 +91,8 @@ export default function AdminClasses() {
   const [formTeacher, setFormTeacher] = useState('')
   const [formLink, setFormLink] = useState('')
 
+  const [pendingRecuperations, setPendingRecuperations] = useState<PendingRecuperationItem[]>([])
+
   const [addForm, setAddForm] = useState<{
     student_names: string[];
     teacher_name: string;
@@ -89,6 +100,7 @@ export default function AdminClasses() {
     time: string;
     timezone: string;
     link_url: string;
+    recuperation_id?: string;
   }>({
     student_names: [],
     teacher_name: '',
@@ -142,8 +154,10 @@ export default function AdminClasses() {
       .order('student_name', { ascending: true })
 
     if (!stdsError && stds) {
-      setStudents(stds.map(s => ({ id: s.id, name: s.student_name })))
+      const mappedStudents = stds.map(s => ({ id: s.id, name: s.student_name }))
+      setStudents(mappedStudents)
     }
+    loadPendingRecuperations()
 
     // Load teachers for the dropdown
     const { data: tchs, error: tchsErr } = await supabase
@@ -158,9 +172,108 @@ export default function AdminClasses() {
     setLoading(false)
   }
 
+  const loadPendingRecuperations = async () => {
+    try {
+      const enriched = await fetchPendingRecuperations()
+      setPendingRecuperations(enriched)
+    } catch (err: any) {
+      console.error('Failed to load pending recuperations:', err)
+    }
+  }
+
   useEffect(() => {
     loadClasses()
+
+    const channel = supabase
+      .channel('admin_classes_recuperations_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'recuperation_classes' }, () => {
+        loadPendingRecuperations()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [])
+
+  const handleScheduleFromTray = (item: PendingRecuperationItem) => {
+    const today = new Date()
+    const defaultDate = isFriday(today) ? addDays(today, 7) : nextFriday(today)
+    const defaultDateStr = format(defaultDate, 'yyyy-MM-dd')
+
+    const student = students.find(s => s.id === item.student_id)
+    const studentName = student?.name || item.student_name
+
+    setAddForm({
+      student_names: [studentName],
+      teacher_name: '',
+      date: defaultDateStr,
+      time: '10:00',
+      timezone: 'America/Sao_Paulo',
+      link_url: '',
+      recuperation_id: item.id,
+    })
+    setOpenAdd(true)
+  }
+
+  const handleDismissFromTray = async (item: PendingRecuperationItem) => {
+    if (!confirm(`Mark recuperation for ${item.student_name} as resolved?`)) return
+    try {
+      await supabase
+        .from('recuperation_classes')
+        .update({ status: 'completed', notes: `${item.notes || ''} — [Dismissed/Resolved by admin]` })
+        .eq('id', item.id)
+      toast({ title: 'Recuperation resolved', description: `Marked completed for ${item.student_name}` })
+      loadPendingRecuperations()
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    }
+  }
+
+  const handleCourtesyReschedule = async () => {
+    if (!selected) return
+
+    const confirmResched = window.confirm(
+      `Cancel this class and grant a recuperation credit to ${selected.student_name}?`
+    )
+    if (!confirmResched) return
+
+    try {
+      const studentMatch = students.find(
+        s => s.name.toLowerCase() === selected.student_name.toLowerCase()
+      )
+      const studentId = studentMatch?.id || ''
+
+      const { error: delError } = await supabase
+        .from('classes')
+        .delete()
+        .eq('id', selected.id)
+
+      if (delError) throw delError
+
+      if (studentId) {
+        await grantRecuperationCredit({
+          studentId,
+          studentName: selected.student_name,
+          originalDate: selected.date,
+          originalTime: selected.time,
+          reason: 'Courtesy reschedule by admin',
+        })
+      }
+
+      toast({
+        title: 'Courtesy credit granted',
+        description: `Class cancelled. 1 recuperation credit added for ${selected.student_name}.`,
+      })
+
+      setOpen(false)
+      setSelected(null)
+      loadClasses()
+      loadPendingRecuperations()
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    }
+  }
 
   // ─────────────────────────────────────────────
   // GROUP BY DAY
@@ -285,7 +398,7 @@ export default function AdminClasses() {
 
     const newEventId = `manual-${Date.now()}`
 
-    const { error } = await supabase
+    const { data: inserted, error } = await supabase
       .from('classes')
       .insert({
         student_name: addForm.student_names.join(', '),
@@ -298,6 +411,7 @@ export default function AdminClasses() {
         status: 'published', // Always publish immediately
         event_id: newEventId,
       })
+      .select()
 
     if (error) {
       console.error("Error inserting class:", error)
@@ -309,10 +423,25 @@ export default function AdminClasses() {
       return
     }
 
-    toast({
-      title: "Class added",
-      description: "The class was added successfully."
-    })
+    if (addForm.recuperation_id && inserted && inserted.length > 0) {
+      await linkRecuperationToScheduledClass({
+        recuperationId: addForm.recuperation_id,
+        classId: inserted[0].id,
+        classDate: addForm.date,
+        classTime: addForm.time,
+        teacherName: addForm.teacher_name,
+      })
+      loadPendingRecuperations()
+      toast({
+        title: "Extra Class Scheduled",
+        description: `Scheduled for ${addForm.date} at ${addForm.time}. Remember to add to your personal Google Calendar!`
+      })
+    } else {
+      toast({
+        title: "Class added",
+        description: "The class was added successfully."
+      })
+    }
 
     setOpenAdd(false)
     setAddForm({ student_names: [], teacher_name: '', date: '', time: '', timezone: 'America/Sao_Paulo', link_url: '' })
@@ -333,6 +462,15 @@ export default function AdminClasses() {
         </div>
         <Button onClick={() => setOpenAdd(true)}>Add Class</Button>
       </div>
+
+      {/* UNSCHEDULED RECUPERATIONS STAGING TRAY */}
+      <UnscheduledRecuperationsTray
+        pendingRecuperations={pendingRecuperations}
+        loading={loading}
+        onSchedule={handleScheduleFromTray}
+        onDismiss={handleDismissFromTray}
+        onRefresh={loadPendingRecuperations}
+      />
 
       {loading ? (
         <p>Loading classes…</p>
@@ -493,15 +631,49 @@ export default function AdminClasses() {
             </div>
           </div>
 
-          <DialogFooter className="sm:justify-between w-full">
-            <Button variant="destructive" onClick={deleteClass} type="button">
-              Delete
-            </Button>
+          <DialogFooter className="sm:justify-between w-full flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <Button variant="destructive" onClick={deleteClass} type="button" size="sm">
+                Delete
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleCourtesyReschedule}
+                type="button"
+                size="sm"
+                className="border-amber-300 bg-amber-50/50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/20 dark:text-amber-300 dark:border-amber-800 text-xs"
+              >
+                <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                Courtesy Reschedule
+              </Button>
+              {selected && (
+                <Button
+                  variant="outline"
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    openGoogleCalendarEvent({
+                      title: selected.title,
+                      date: formDate,
+                      startTime: formTime || '10:00',
+                      endTime: '10:50',
+                      timezone: formTimezone,
+                      description: `Teacher: ${formTeacher}\nStudent: ${selected.student_name}\nMeet Link: ${formLink}`,
+                      location: formLink,
+                    });
+                  }}
+                  className="border-sky-300 text-sky-700 hover:bg-sky-50 dark:border-sky-800 dark:text-sky-300 text-xs"
+                >
+                  <CalendarIcon className="h-3.5 w-3.5 mr-1" />
+                  Add to GCal
+                </Button>
+              )}
+            </div>
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setOpen(false)}>
+              <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={saveChanges}>Save</Button>
+              <Button size="sm" onClick={saveChanges}>Save</Button>
             </div>
           </DialogFooter>
         </DialogContent>

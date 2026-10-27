@@ -160,6 +160,23 @@ const AdminAdmins: React.FC = () => {
 
             if (error) throw error
 
+            if (form.password && form.password.trim() !== "") {
+                const { error: pwdError } = await supabase.functions.invoke("update-user-password", {
+                    body: {
+                        userId: selectedAdmin.id,
+                        newPassword: form.password
+                    }
+                })
+                if (pwdError) {
+                    console.error("Failed to update password:", pwdError)
+                    toast({
+                        title: "Warning",
+                        description: "Admin details updated, but password change failed.",
+                        variant: "destructive"
+                    })
+                }
+            }
+
             toast({
                 title: "Admin updated",
                 description: "Changes saved successfully.",
@@ -316,6 +333,16 @@ const AdminAdmins: React.FC = () => {
                             <Input
                                 value={form.name}
                                 onChange={(e) => setForm({ ...form, name: e.target.value })}
+                            />
+                        </div>
+
+                        <div>
+                            <Label>New Password (optional)</Label>
+                            <Input
+                                type="text"
+                                placeholder="Leave blank to keep unchanged"
+                                value={form.password}
+                                onChange={(e) => setForm({ ...form, password: e.target.value })}
                             />
                         </div>
 

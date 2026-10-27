@@ -13,8 +13,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Undo2, CheckCircle2, Trash2, Eye, EyeOff, Settings } from 'lucide-react';
+import { Undo2, CheckCircle2, Trash2, Eye, EyeOff, Settings, TrendingDown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Link } from 'react-router-dom';
 
 interface PaymentWithStudent extends Payment {
   student_name?: string;
@@ -214,9 +215,17 @@ const AdminPayments: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h2 className="text-2xl font-semibold">Administrator Panel</h2>
-        <p className="text-muted-foreground">Payment Management</p>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-semibold">Administrator Panel</h2>
+          <p className="text-muted-foreground">Student Payments & Revenue</p>
+        </div>
+        <Button asChild variant="outline" className="border-rose-200 text-rose-700 hover:bg-rose-50 dark:border-rose-900 dark:text-rose-400">
+          <Link to="/admin/expenses">
+            <TrendingDown className="w-4 h-4 mr-2" />
+            Manage Expenses
+          </Link>
+        </Button>
       </div>
 
       {/* GLOBAL TOTAL */}

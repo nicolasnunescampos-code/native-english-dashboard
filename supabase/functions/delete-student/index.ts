@@ -41,14 +41,25 @@ Deno.serve(async (req) => {
       .eq('id', student_id)
       .single();
 
-    // Delete related records (payments, classes, etc) explicitly in case cascade isn't configured
-    await supabaseClient.from('payments').delete().eq('student_id', student_id)
+    // Delete related records explicitly in case cascade isn't configured to avoid Foreign Key violation errors
+    await supabaseClient.from('class_assignments').delete().eq('student_id', student_id);
+    await supabaseClient.from('student_progress').delete().eq('student_id', student_id);
+    await supabaseClient.from('recuperations').delete().eq('student_id', student_id);
+    await supabaseClient.from('chat_sessions').delete().eq('student_id', student_id);
+    await supabaseClient.from('chat_messages').delete().eq('sender_id', student_id);
+    await supabaseClient.from('messages').delete().eq('sender_id', student_id);
+    await supabaseClient.from('messages').delete().eq('receiver_id', student_id);
+    await supabaseClient.from('payments').delete().eq('student_id', student_id);
+
+    // Also delete by name just in case there are legacy records using strings instead of UUIDs
     if (student?.student_name) {
-      await supabaseClient.from('payments').delete().eq('student_name', student?.student_name)
+      await supabaseClient.from('payments').delete().eq('student_name', student.student_name);
+      await supabaseClient.from('classes').delete().eq('student_name', student.student_name);
+      await supabaseClient.from('recuperations').delete().eq('student_name', student.student_name);
     }
 
     // Then delete from 'students' table manually
-    await supabaseClient.from('students').delete().eq('id', student_id)
+    await supabaseClient.from('students').delete().eq('id', student_id);
 
     // And lastly delete from Auth
     const { error: authError } = await supabaseClient.auth.admin.deleteUser(student_id)

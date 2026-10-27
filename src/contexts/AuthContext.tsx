@@ -10,6 +10,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   studentName: string | null;
+  studentId: string | null;
   teacherName: string | null;
   rulesAgreed: boolean | null;
   updateRulesAgreed: (agreed: boolean) => void;
@@ -25,6 +26,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [studentName, setStudentName] = useState<string | null>(null);
   const [teacherName, setTeacherName] = useState<string | null>(null);
   const [rulesAgreed, setRulesAgreed] = useState<boolean | null>(null);
+
+  const [studentId, setStudentId] = useState<string | null>(null);
 
   const deriveRoleFromSession = (session: Session | null): UserRole | null => {
     const rawRole = session?.user?.app_metadata?.role;
@@ -45,7 +48,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const { data: studentData, error } = await supabase
         .from('students')
-        .select('student_name, rules_agreed')
+        .select('id, student_name, rules_agreed')
         .ilike('email', email)
         .maybeSingle();
 
@@ -55,11 +58,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const name = studentData?.student_name?.trim() ?? null;
       setStudentName(name);
+      setStudentId(studentData?.id ?? null);
       setRulesAgreed(studentData?.rules_agreed ?? false);
       return name;
     } catch (error) {
       console.error('Error fetching student params:', error);
       setStudentName(null);
+      setStudentId(null);
       setRulesAgreed(null);
       return null;
     }
@@ -77,6 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Names are NOT used for authorization; reset whenever the auth user changes
       setStudentName(null);
+      setStudentId(null);
       setTeacherName(null);
       setRulesAgreed(null);
 
@@ -171,6 +177,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSession(null);
     setRole(null);
     setStudentName(null);
+    setStudentId(null);
     setTeacherName(null);
     setRulesAgreed(null);
     localStorage.clear();
@@ -185,6 +192,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       signIn,
       signOut,
       studentName,
+      studentId,
       teacherName,
       rulesAgreed,
       updateRulesAgreed

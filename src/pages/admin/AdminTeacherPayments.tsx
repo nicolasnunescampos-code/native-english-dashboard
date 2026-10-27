@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
-import { format, startOfMonth, endOfMonth, getWeekOfMonth, parseISO, getWeeksInMonth, startOfWeek, endOfWeek, addDays, isBefore, isAfter, max, min } from 'date-fns'
+import { format, startOfMonth, endOfMonth, getWeekOfMonth, parseISO, getWeeksInMonth, startOfWeek, endOfWeek, addDays, subDays, isBefore, isAfter, max, min } from 'date-fns'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 import {
   Table,
   TableBody,
@@ -15,11 +16,21 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { ChevronLeft, ChevronRight, FileText, Copy } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText, Copy, Wallet, CheckCircle2, AlertCircle } from 'lucide-react'
 
 // Types
 type Teacher = { id: string; name: string; class_rate?: number }
@@ -46,6 +57,38 @@ type WeekDetails = {
   scheduled: SessionRecord[]
 }
 
+export type TeacherPaymentRow = {
+  id: string;
+  name: string;
+  weeks: Record<number, number>;
+  weekDetails: Record<number, WeekDetails>;
+  isConfirmedWeek: Record<number, boolean>;
+  totalAulas: number;
+  rate: number;
+  totalPagar: number;
+}
+
+function getCustomWeeks(date: Date) {
+  const monthStart = startOfMonth(date)
+  const monthEnd = endOfMonth(date)
+  const weeks: { start: Date; end: Date }[] = []
+  let current = monthStart
+
+  while (current <= monthEnd) {
+    const weekStart = current
+    const weekEnd = min([endOfWeek(current, { weekStartsOn: 1 }), monthEnd])
+    weeks.push({ start: weekStart, end: weekEnd })
+    current = addDays(weekEnd, 1)
+  }
+
+  if (weeks.length > 5) {
+    weeks[1].start = weeks[0].start
+    weeks.shift()
+  }
+
+  return weeks
+}
+
 export default function AdminTeacherPayments() {
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [classes, setClasses] = useState<ClassRecord[]>([])
@@ -57,9 +100,19 @@ export default function AdminTeacherPayments() {
     teacherName: string;
     week: number;
     details: WeekDetails;
+    confirmedCount?: number;
   } | null>(null)
 
-  const [selectedReceipt, setSelectedReceipt] = useState<typeof tableData[0] | null>(null)
+  const [confirmations, setConfirmations] = useState<any[]>([])
+
+  const [selectedReceipt, setSelectedReceipt] = useState<TeacherPaymentRow | null>(null)
+
+  // Expense Integration States
+  const [existingTeacherExpenses, setExistingTeacherExpenses] = useState<any[]>([])
+  const [confirmingExpenseTeacher, setConfirmingExpenseTeacher] = useState<TeacherPaymentRow | null>(null)
+  const [expensePaymentMethod, setExpensePaymentMethod] = useState<string>("Company's Nubank")
+  const [expensePaymentDate, setExpensePaymentDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'))
+  const [submittingExpense, setSubmittingExpense] = useState(false)
 
   const handleRateChangeLocal = (teacherId: string, val: string) => {
     const parsed = parseFloat(val)
@@ -99,18 +152,139 @@ export default function AdminTeacherPayments() {
 
     if (cData) setClasses(cData)
 
+    // Fetch weekly confirmations for this month's range
+    const searchStart = format(subDays(startOfMonth(currentDate), 7), 'yyyy-MM-dd')
+    const searchEnd = format(addDays(endOfMonth(currentDate), 7), 'yyyy-MM-dd')
+
+    const { data: confData } = await supabase
+      .from('teacher_weekly_confirmations')
+      .select('*')
+      .gte('week_start_date', searchStart)
+      .lte('week_start_date', searchEnd)
+
+    if (confData) setConfirmations(confData)
+
     setLoading(false)
+  }
+
+  const fetchTeacherExpenses = async () => {
+    const monthStart = format(startOfMonth(currentDate), 'yyyy-MM-dd')
+    const monthEnd = format(endOfMonth(currentDate), 'yyyy-MM-dd')
+
+    try {
+      const { data } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('category', 'Teacher Payments')
+        .gte('due_date', monthStart)
+        .lte('due_date', monthEnd)
+
+      setExistingTeacherExpenses(data || [])
+    } catch (e) {
+      console.error('Error fetching teacher expenses:', e)
+    }
   }
 
   useEffect(() => {
     loadData()
+    fetchTeacherExpenses()
   }, [currentDate])
+
+  const getTeacherExpense = (teacherName: string) => {
+    const lower = teacherName.toLowerCase()
+    return existingTeacherExpenses.find(
+      (e: any) =>
+        e.title?.toLowerCase().includes(lower) ||
+        (e.notes && e.notes.toLowerCase().includes(lower))
+    )
+  }
+
+  const handleOpenExpenseConfirm = (row: TeacherPaymentRow) => {
+    setConfirmingExpenseTeacher(row)
+    const existing = getTeacherExpense(row.name)
+    if (existing) {
+      if (existing.payment_method) {
+        setExpensePaymentMethod(existing.payment_method)
+      }
+      if (existing.due_date) {
+        setExpensePaymentDate(existing.due_date)
+      }
+    } else {
+      setExpensePaymentMethod("Company's Nubank")
+      setExpensePaymentDate(format(new Date(), 'yyyy-MM-dd'))
+    }
+  }
+
+  const handleConfirmExpense = async () => {
+    if (!confirmingExpenseTeacher) return
+    setSubmittingExpense(true)
+
+    const monthLabel = format(currentDate, 'MMMM yyyy')
+    const existing = getTeacherExpense(confirmingExpenseTeacher.name)
+    const title = `Teacher Payroll - ${confirmingExpenseTeacher.name} (${monthLabel})`
+    const notesText = `[Paid via: ${expensePaymentMethod}] ${confirmingExpenseTeacher.totalAulas} classes taught at R$ ${confirmingExpenseTeacher.rate.toFixed(2)}/class (${monthLabel})`
+
+    try {
+      if (existing) {
+        let updatePayload: any = {
+          title,
+          amount: confirmingExpenseTeacher.totalPagar,
+          due_date: expensePaymentDate,
+          status: 'paid',
+          payment_method: expensePaymentMethod,
+          notes: notesText,
+        }
+        let { error } = await supabase.from('expenses').update(updatePayload).eq('id', existing.id)
+
+        if (error && (error.code === '42703' || error.message?.includes('payment_method'))) {
+          delete updatePayload.payment_method
+          const retry = await supabase.from('expenses').update(updatePayload).eq('id', existing.id)
+          if (retry.error) throw retry.error
+        } else if (error) {
+          throw error
+        }
+        toast.success(`Expense updated for ${confirmingExpenseTeacher.name}!`)
+      } else {
+        let insertPayload: any = {
+          title,
+          category: 'Teacher Payments',
+          amount: confirmingExpenseTeacher.totalPagar,
+          currency: 'BRL',
+          due_date: expensePaymentDate,
+          status: 'paid',
+          payment_method: expensePaymentMethod,
+          is_recurring: false,
+          notes: notesText,
+        }
+        let { error } = await supabase.from('expenses').insert(insertPayload)
+
+        if (error && (error.code === '42703' || error.message?.includes('payment_method'))) {
+          delete insertPayload.payment_method
+          const retry = await supabase.from('expenses').insert(insertPayload)
+          if (retry.error) throw retry.error
+        } else if (error) {
+          throw error
+        }
+        toast.success(`Expense of R$${confirmingExpenseTeacher.totalPagar.toFixed(2)} for ${confirmingExpenseTeacher.name} added to Expenses!`)
+      }
+
+      setConfirmingExpenseTeacher(null)
+      await fetchTeacherExpenses()
+    } catch (err: any) {
+      console.error('Error recording expense:', err)
+      toast.error(err.message || 'Failed to save expense.')
+    } finally {
+      setSubmittingExpense(false)
+    }
+  }
 
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
 
   // Calculate stats
-  const tableData = useMemo(() => {
+  const tableData: TeacherPaymentRow[] = useMemo(() => {
+    const monthWeeks = getCustomWeeks(currentDate)
+
     return teachers.map(teacher => {
       // Helper to strictly extract Teacher name from titles formatted like "Student Name - Teacher Name"
       const extractTeacherName = (title: string) => {
@@ -159,12 +333,18 @@ export default function AdminTeacherPayments() {
         }
       }
 
-      const weeks: Record<number, number> = {}       // Paid (graded) classes count
+      const autoWeeks: Record<number, number> = {}       // Paid (graded) classes count
       const weekDetails: Record<number, WeekDetails> = {} // Full breakdown
+      const weeks: Record<number, number> = {}           // Final count (Confirmed or Auto)
+      const isConfirmedWeek: Record<number, boolean> = {} // Whether week was confirmed
       
       for (const session of Object.values(sessionsMap)) {
-        // getWeekOfMonth returns week number (1-index), starting week on Monday (1)
-        const weekNum = getWeekOfMonth(parseISO(session.date), { weekStartsOn: 1 })
+        const weekIndex = monthWeeks.findIndex(w => {
+          const sDate = format(w.start, 'yyyy-MM-dd')
+          const eDate = format(w.end, 'yyyy-MM-dd')
+          return session.date >= sDate && session.date <= eDate
+        })
+        const weekNum = weekIndex >= 0 ? weekIndex + 1 : 1
         
         if (!weekDetails[weekNum]) {
           weekDetails[weekNum] = { graded: [], absent: [], scheduled: [] }
@@ -179,13 +359,35 @@ export default function AdminTeacherPayments() {
 
         if (session.is_graded) {
           weekDetails[weekNum].graded.push(sessionRecord)
-          weeks[weekNum] = (weeks[weekNum] || 0) + 1
+          autoWeeks[weekNum] = (autoWeeks[weekNum] || 0) + 1
         } else if (session.is_absent && session.student_names.length > 0) {
           weekDetails[weekNum].absent.push(sessionRecord)
         } else {
           weekDetails[weekNum].scheduled.push(sessionRecord)
         }
       }
+
+      // Reconcile each week with confirmed count from teacher_weekly_confirmations
+      monthWeeks.forEach((w, idx) => {
+        const weekNum = idx + 1
+        const mondayStr = format(startOfWeek(w.start, { weekStartsOn: 1 }), 'yyyy-MM-dd')
+        const startStr = format(w.start, 'yyyy-MM-dd')
+        const endStr = format(w.end, 'yyyy-MM-dd')
+
+        const conf = confirmations.find(c => {
+          if (c.teacher_id !== teacher.id) return false
+          const cDate = c.week_start_date
+          return cDate === mondayStr || cDate === startStr || (cDate >= mondayStr && cDate <= endStr)
+        })
+
+        if (conf !== undefined && conf !== null) {
+          weeks[weekNum] = conf.classes_count
+          isConfirmedWeek[weekNum] = true
+        } else {
+          weeks[weekNum] = autoWeeks[weekNum] || 0
+          isConfirmedWeek[weekNum] = false
+        }
+      })
       
       const totalAulas = Object.values(weeks).reduce((a, b) => a + b, 0)
       const rate = teacher.class_rate || 0
@@ -196,14 +398,16 @@ export default function AdminTeacherPayments() {
         name: teacher.name,
         weeks,
         weekDetails,
+        isConfirmedWeek,
         totalAulas,
         rate,
         totalPagar
       }
     })
-  }, [teachers, classes])
+  }, [teachers, classes, confirmations, currentDate])
 
-  const maxWeeks = getWeeksInMonth(currentDate, { weekStartsOn: 1 })
+  const monthWeeks = getCustomWeeks(currentDate)
+  const maxWeeks = monthWeeks.length
   const globalTotal = tableData.reduce((acc, row) => acc + row.totalPagar, 0)
 
   return (
@@ -229,18 +433,14 @@ export default function AdminTeacherPayments() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="min-w-[150px]">Nome do Professor</TableHead>
-                  {[...Array(maxWeeks)].map((_, i) => {
-                    const start = startOfWeek(addDays(startOfMonth(currentDate), i * 7), { weekStartsOn: 1 })
-                    const end = endOfWeek(start, { weekStartsOn: 1 })
-                    return (
-                      <TableHead key={i} className="text-center whitespace-nowrap align-bottom pb-4">
-                        <div className="font-semibold text-foreground">Semana {i + 1}</div>
-                        <div className="text-[11px] font-normal text-muted-foreground mt-1 capitalize">
-                          {format(start, 'MMM d')} - {format(end, 'MMM d')}
-                        </div>
-                      </TableHead>
-                    )
-                  })}
+                  {monthWeeks.map((week, i) => (
+                    <TableHead key={i} className="text-center whitespace-nowrap align-bottom pb-4">
+                      <div className="font-semibold text-foreground">Semana {i + 1}</div>
+                      <div className="text-[11px] font-normal text-muted-foreground mt-1 capitalize">
+                        {format(week.start, 'MMM d')} - {format(week.end, 'MMM d')}
+                      </div>
+                    </TableHead>
+                  ))}
                   <TableHead className="text-center whitespace-nowrap align-bottom pb-4">Total de Aulas</TableHead>
                   <TableHead className="text-center whitespace-nowrap align-bottom pb-4">Valor por Aula</TableHead>
                   <TableHead className="text-right whitespace-nowrap align-bottom pb-4">Total a Pagar</TableHead>
@@ -252,25 +452,37 @@ export default function AdminTeacherPayments() {
                     <TableCell className="font-medium whitespace-nowrap">{row.name}</TableCell>
                     {[...Array(maxWeeks)].map((_, i) => {
                       const weekKey = i + 1;
-                      const hasData = row.weekDetails[weekKey] && (
+                      const isConfirmed = row.isConfirmedWeek?.[weekKey];
+                      const count = row.weeks[weekKey];
+                      const hasData = (count !== undefined && count !== null) || (row.weekDetails[weekKey] && (
                         row.weekDetails[weekKey].graded.length > 0 ||
                         row.weekDetails[weekKey].absent.length > 0 ||
                         row.weekDetails[weekKey].scheduled.length > 0
-                      );
+                      ));
                       
                       return (
                         <TableCell key={weekKey} className="text-center">
                           {hasData ? (
                             <Button 
                                variant="ghost" 
-                               className="font-semibold text-primary hover:bg-primary/20 bg-primary/5 h-auto py-1 px-3 min-w-[36px]"
+                               className={cn(
+                                 "font-bold h-auto py-1 px-2.5 min-w-[36px] gap-1 transition-all",
+                                 isConfirmed
+                                   ? "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 shadow-2xs"
+                                   : "text-primary hover:bg-primary/20 bg-primary/5"
+                               )}
+                               title={isConfirmed ? "Confirmed in Teacher Confirmations" : "Calculated from graded classes"}
                                onClick={() => setSelectedDetails({
                                  teacherName: row.name,
                                  week: weekKey,
-                                 details: row.weekDetails[weekKey]
+                                 details: row.weekDetails[weekKey] || { graded: [], absent: [], scheduled: [] },
+                                 confirmedCount: isConfirmed ? count : undefined
                                })}
                             >
-                              {row.weeks[weekKey] || 0}
+                              <span>{count || 0}</span>
+                              {isConfirmed && (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              )}
                             </Button>
                           ) : (
                             <span className="text-muted-foreground opacity-50">-</span>
@@ -293,8 +505,35 @@ export default function AdminTeacherPayments() {
                       />
                     </TableCell>
                     <TableCell className="text-right font-bold text-lg whitespace-nowrap text-green-700 dark:text-green-500">
-                      <div className="flex items-center justify-end gap-3">
-                        R${row.totalPagar.toFixed(2)}
+                      <div className="flex items-center justify-end gap-2.5">
+                        <span className="font-extrabold">R${row.totalPagar.toFixed(2)}</span>
+
+                        {/* Send to Expenses Button */}
+                        {getTeacherExpense(row.name) ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenExpenseConfirm(row)}
+                            title="Already sent to expenses. Click to view or update."
+                            className="h-8 rounded-lg text-xs font-bold border-emerald-400 bg-emerald-100/80 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-700 gap-1 px-2.5 shadow-2xs"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            In Expenses
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenExpenseConfirm(row)}
+                            disabled={row.totalPagar <= 0}
+                            title="Register this payment directly in Company Expenses"
+                            className="h-8 rounded-lg text-xs font-bold border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 gap-1.5 px-2.5 shadow-2xs"
+                          >
+                            <Wallet className="w-3.5 h-3.5 text-emerald-600" />
+                            Send to Expenses
+                          </Button>
+                        )}
+
                         <Button variant="ghost" size="icon" onClick={() => setSelectedReceipt(row)} title="Generate Receipt">
                           <FileText className="w-5 h-5 text-muted-foreground hover:text-primary" />
                         </Button>
@@ -326,6 +565,17 @@ export default function AdminTeacherPayments() {
            
            {selectedDetails && (
              <div className="space-y-6 mt-4">
+                {selectedDetails.confirmedCount !== undefined && (
+                  <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      <span className="font-bold text-foreground">Teacher Confirmation:</span>
+                    </div>
+                    <span className="font-black text-emerald-600 dark:text-emerald-400 text-sm">
+                      {selectedDetails.confirmedCount} classes confirmed
+                    </span>
+                  </div>
+                )}
                 {/* GRADED / PAID */}
                 <div>
                   <h3 className="font-semibold text-green-600 mb-2 flex items-center gap-2">
@@ -415,11 +665,14 @@ export default function AdminTeacherPayments() {
 
                 <div className="bg-muted/30 p-6 rounded-lg border space-y-4 shadow-sm">
                   <div className="space-y-3 border-b border-border/50 pb-4">
-                    {[...Array(maxWeeks)].map((_, i) => {
+                    {monthWeeks.map((week, i) => {
                       const weekCount = selectedReceipt.weeks[i + 1] || 0;
+                      
                       return (
                         <div key={i} className="flex justify-between text-sm">
-                          <span className="text-muted-foreground font-medium">Week {i + 1}:</span>
+                          <span className="text-muted-foreground font-medium">
+                            Week {i + 1} <span className="text-xs opacity-70 ml-1">({format(week.start, 'MMM d')} - {format(week.end, 'MMM d')})</span>:
+                          </span>
                           <span className="font-semibold text-foreground">{weekCount} class{weekCount !== 1 ? 'es' : ''}</span>
                         </div>
                       )
@@ -444,7 +697,9 @@ export default function AdminTeacherPayments() {
 
                 <Button className="w-full mt-4" size="lg" onClick={() => {
                   const text = `*${selectedReceipt.name} - ${format(currentDate, 'MMMM yyyy')}*\n\n` +
-                    [...Array(maxWeeks)].map((_, i) => `Week ${i + 1}: ${selectedReceipt.weeks[i + 1] || 0} classes`).join('\n') +
+                    monthWeeks.map((week, i) => {
+                      return `Week ${i + 1} (${format(week.start, 'MMM d')} - ${format(week.end, 'MMM d')}): ${selectedReceipt.weeks[i + 1] || 0} classes`
+                    }).join('\n') +
                     `\n------------------\n` +
                     `Total Classes: ${selectedReceipt.totalAulas}\n` +
                     `Rate: R$${selectedReceipt.rate.toFixed(2)}\n` +
@@ -458,6 +713,110 @@ export default function AdminTeacherPayments() {
                 </Button>
              </div>
            )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation Dialog for Teacher Payroll Expense */}
+      <Dialog
+        open={!!confirmingExpenseTeacher}
+        onOpenChange={(open) => !open && setConfirmingExpenseTeacher(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl flex items-center gap-2">
+              <Wallet className="w-5 h-5 text-emerald-600" />
+              Confirm Teacher Payroll Expense
+            </DialogTitle>
+            <DialogDescription>
+              Register this teacher payment directly into Company Expenses.
+            </DialogDescription>
+          </DialogHeader>
+
+          {confirmingExpenseTeacher && (
+            <div className="space-y-4 py-2">
+              {/* Summary Card */}
+              <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase">Professor</span>
+                  <span className="font-bold text-foreground text-sm">{confirmingExpenseTeacher.name}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase">Reference Month</span>
+                  <span className="font-semibold text-sm text-foreground">{format(currentDate, 'MMMM yyyy')}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase">Aulas Ministradas</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {confirmingExpenseTeacher.totalAulas} aulas × R${confirmingExpenseTeacher.rate.toFixed(2)}
+                  </span>
+                </div>
+                <div className="border-t border-emerald-200/80 dark:border-emerald-800/80 pt-2 flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 uppercase">Total a Pagar</span>
+                  <span className="text-xl font-extrabold text-emerald-700 dark:text-emerald-400">
+                    R${confirmingExpenseTeacher.totalPagar.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Already sent warning if updating */}
+              {getTeacherExpense(confirmingExpenseTeacher.name) && (
+                <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-900 dark:text-amber-200 text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+                  <span>An expense for this teacher in this month is already recorded. Confirming will update the existing entry.</span>
+                </div>
+              )}
+
+              {/* Payment Account */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Paid Via / Account</Label>
+                <Select value={expensePaymentMethod} onValueChange={setExpensePaymentMethod}>
+                  <SelectTrigger className="w-full h-10 rounded-xl text-xs">
+                    <SelectValue placeholder="Select account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Company's Nubank">Company's Nubank</SelectItem>
+                    <SelectItem value="Nicolas's Personal Acc">Nicolas's Personal Acc</SelectItem>
+                    <SelectItem value="InfinitePay">InfinitePay</SelectItem>
+                    <SelectItem value="Company Credit Card">Company Credit Card</SelectItem>
+                    <SelectItem value="Wise / International">Wise / International</SelectItem>
+                    <SelectItem value="Cash">Cash</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Payment Date */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Payment / Due Date</Label>
+                <Input
+                  type="date"
+                  value={expensePaymentDate}
+                  onChange={(e) => setExpensePaymentDate(e.target.value)}
+                  className="w-full h-10 rounded-xl text-xs"
+                />
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setConfirmingExpenseTeacher(null)}
+                  disabled={submittingExpense}
+                  className="rounded-xl text-xs"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleConfirmExpense}
+                  disabled={submittingExpense || confirmingExpenseTeacher.totalPagar <= 0}
+                  className="rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                >
+                  {submittingExpense ? 'Saving...' : 'Confirm & Send to Expenses'}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

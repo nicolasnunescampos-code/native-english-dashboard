@@ -366,6 +366,20 @@ const AdminMaterials: React.FC = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {materials
                                     .filter(material => (material.category || 'Grammar').toLowerCase() === cat.toLowerCase())
+                                    .sort((a, b) => {
+                                        const getLevelScore = (m: Material) => {
+                                            const level = (m.level || '').toLowerCase();
+                                            const title = (m.title || '').toLowerCase();
+                                            
+                                            if (level.includes('beginner') || title.includes('beginner')) return 1;
+                                            if (level.includes('intermediate') || title.includes('intermediate')) return 2;
+                                            if (title.includes('advanced (1)') || title.includes('advanced 1')) return 3;
+                                            if (title.includes('advanced (2)') || title.includes('advanced 2')) return 4;
+                                            if (level.includes('advanced') || title.includes('advanced')) return 3;
+                                            return 5;
+                                        };
+                                        return getLevelScore(a) - getLevelScore(b);
+                                    })
                                     .map((material) => (
                                     <Card key={material.id} className="overflow-hidden hover:shadow-lg transition-all group flex flex-col h-full border-muted-foreground/20">
                                         {/* Netflix style Thumbnail */}

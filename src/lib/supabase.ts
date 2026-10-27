@@ -24,6 +24,7 @@ export interface Student {
   course_type?: 'Native English' | 'Conversation Club' | 'Business English';
 }
 
+
 export interface ClassAssignment {
   id: number;
   class_id: number;
@@ -48,6 +49,7 @@ export interface Class {
   class_level: string;
   class_grade?: number;
   speaking_grade?: number;
+  listening_grade?: number;
   grammar_grade?: number;
   reading_grade?: number;
   class_chapter?: string;
@@ -66,6 +68,20 @@ export interface Payment {
   payment_link?: string;
   student_name?: string;
   student_id?: string;
+}
+
+export interface Expense {
+  id?: string;
+  title: string;
+  category: string;
+  amount: number;
+  currency: 'BRL' | 'USD' | 'EUR' | 'CAD';
+  due_date: string;
+  status: 'pending' | 'paid';
+  payment_method?: string;
+  is_recurring?: boolean;
+  notes?: string | null;
+  created_at?: string;
 }
 
 export interface Material {
@@ -93,6 +109,27 @@ export interface Video {
   youtube_url: string;
   thumbnail_url: string;
   level: 'Beginner' | 'Intermediate' | 'Advanced';
+  category?: string;
+}
+
+const VIDEO_COURSE_PREFIX = /^\[VideoCourse\]\s*/i;
+
+export function isVideoCourseItem(video: Video): boolean {
+  if (video.category === 'video_course') return true;
+  if (typeof video.description === 'string' && VIDEO_COURSE_PREFIX.test(video.description)) {
+    return true;
+  }
+  return false;
+}
+
+export function cleanVideoDescription(description?: string | null): string {
+  if (!description) return '';
+  return description.replace(VIDEO_COURSE_PREFIX, '').trim();
+}
+
+export function encodeVideoCourseDescription(description?: string | null): string {
+  const clean = cleanVideoDescription(description);
+  return clean ? `[VideoCourse] ${clean}` : '[VideoCourse]';
 }
 export interface Audio {
   id?: number;
@@ -152,4 +189,80 @@ export interface ExamSubmission {
   created_at?: string;
   exams?: Exam; // For joined queries
 }
+
+export interface FeedbackRequest {
+  id: string;
+  created_at?: string;
+  status: 'active' | 'closed';
+}
+
+export interface StudentFeedback {
+  id?: string;
+  request_id: string;
+  student_id: string;
+  classes_score: number;
+  teachers_score: number;
+  lessons_score: number;
+  schedule_score: number;
+  comments?: string;
+  created_at?: string;
+}
+
+export type GrammarBookLevel = 'Beginner' | 'Intermediate' | 'Advanced';
+export type GrammarQuestionType = 'true_false_fix' | 'fill_gap' | 'word_order' | 'speaking';
+export type GrammarQuestionStatus = 'draft' | 'approved' | 'archived';
+
+export interface GrammarGameQuestion {
+  id: string;
+  book: GrammarBookLevel;
+  chapter: string;
+  type: GrammarQuestionType;
+  sentence: string;
+  correct_sentence: string;
+  error_word_index: number | null;
+  options: string[];
+  correct_option: string;
+  explanation: string;
+  phonetic_focus?: string;
+  status: GrammarQuestionStatus;
+  created_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface GrammarGameMistake {
+  question_id: string;
+  question_type?: GrammarQuestionType;
+  sentence?: string;
+  student_answer: string;
+  correct_answer: string;
+  correct_sentence?: string;
+  explanation?: string;
+}
+
+export interface GrammarGameSession {
+  id: string;
+  student_id: string;
+  book: GrammarBookLevel;
+  chapter: string;
+  score: number;
+  accuracy: number;
+  correct_count: number;
+  total_count: number;
+  best_combo: number;
+  duration_seconds: number;
+  mistakes: GrammarGameMistake[];
+  created_at: string;
+}
+
+export interface GrammarRushLeaderboardEntry {
+  rank: number;
+  first_name: string;
+  score: number;
+  accuracy: number;
+  best_combo: number;
+  games_played: number;
+  is_current_user: boolean;
+}
+
 

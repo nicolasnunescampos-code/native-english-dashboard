@@ -255,6 +255,7 @@ const AdminGrades: React.FC = () => {
                 <TableHead>Chapter</TableHead>
                 <TableHead>Class</TableHead>
                 <TableHead>Speaking</TableHead>
+                <TableHead>Listening</TableHead>
                 <TableHead>Grammar</TableHead>
                 <TableHead>Reading</TableHead>
               </TableRow>
@@ -262,7 +263,7 @@ const AdminGrades: React.FC = () => {
             <TableBody>
               {filteredClasses.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                     {selectedTeacher === 'all' ? 'No recent grades or absences' : `No recent activity found for ${selectedTeacher}`}
                   </TableCell>
                 </TableRow>
@@ -283,7 +284,7 @@ const AdminGrades: React.FC = () => {
                     </TableCell>
                     
                     {cls.is_absent ? (
-                      <TableCell colSpan={4}>
+                      <TableCell colSpan={5}>
                         <div className="flex items-center text-red-600 font-medium bg-red-100/50 px-3 py-1.5 rounded-md w-fit border border-red-200">
                           <span className="mr-2">✗</span> Student was Absent
                         </div>
@@ -294,6 +295,7 @@ const AdminGrades: React.FC = () => {
                           {cls.class_grade}/10
                         </TableCell>
                         <TableCell>{cls.speaking_grade ?? '-'}</TableCell>
+                        <TableCell>{cls.listening_grade ?? '-'}</TableCell>
                         <TableCell>{cls.grammar_grade ?? '-'}</TableCell>
                         <TableCell>{cls.reading_grade ?? '-'}</TableCell>
                       </>

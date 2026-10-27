@@ -21,7 +21,8 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
-import { Pencil, Trash2, Clock, PhoneForwarded, CheckCircle2, XCircle, Search, UserPlus, Gift, Trophy, Medal, PieChart as PieChartIcon, BarChart as BarChartIcon, Calendar } from "lucide-react"
+import { Pencil, Trash2, Clock, PhoneForwarded, CheckCircle2, XCircle, Search, UserPlus, Gift, Trophy, Medal, PieChart as PieChartIcon, BarChart as BarChartIcon, Calendar, MessageSquare, Mail, Globe, Volume2, BellRing } from "lucide-react"
+import { playLeadNotificationSound, requestDesktopNotificationPermission } from "@/components/AdminLeadNotifier"
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts"
 
 interface Lead {
@@ -32,6 +33,52 @@ interface Lead {
   comments: string | null
   referred_by: string | null
   created_at: string
+  email?: string | null
+  phone?: string | null
+  english_level?: string | null
+  course_interest?: string | null
+  weekly_frequency?: string | null
+}
+
+const getLeadDetails = (lead: Lead) => {
+  let phone = lead.phone || null
+  let email = lead.email || null
+  let level = lead.english_level || null
+  let course = lead.course_interest || null
+  let frequency = lead.weekly_frequency || null
+
+  if (lead.comments) {
+    if (!phone) {
+      const phoneMatch = lead.comments.match(/(?:WhatsApp|Telefone|Phone):\s*([^\n\r]+)/i)
+      if (phoneMatch) phone = phoneMatch[1].trim()
+    }
+    if (!email) {
+      const emailMatch = lead.comments.match(/(?:Email|E-mail):\s*([^\s\n\r]+@[^\s\n\r]+)/i)
+      if (emailMatch) email = emailMatch[1].trim()
+    }
+    if (!level) {
+      const levelMatch = lead.comments.match(/(?:Nível|Level):\s*([^\n\r]+)/i)
+      if (levelMatch) level = levelMatch[1].trim()
+    }
+    if (!course) {
+      const courseMatch = lead.comments.match(/(?:Curso|Course):\s*([^\n\r]+)/i)
+      if (courseMatch) course = courseMatch[1].trim()
+    }
+    if (!frequency) {
+      const freqMatch = lead.comments.match(/(?:Frequência|Frequency):\s*([^\n\r]+)/i)
+      if (freqMatch) frequency = freqMatch[1].trim()
+    }
+  }
+
+  return { phone, email, level, course, frequency }
+}
+
+const getWhatsAppLink = (rawPhone: string, leadName: string) => {
+  const digits = rawPhone.replace(/\D/g, '')
+  if (!digits) return null
+  const formattedNumber = (digits.length === 10 || digits.length === 11) ? `55${digits}` : digits
+  const text = encodeURIComponent(`Olá ${leadName}, tudo bem? Aqui é da Native English! Vi seu contato no nosso site para agendar uma conversa experimental.`)
+  return `https://wa.me/${formattedNumber}?text=${text}`
 }
 
 interface Student {
@@ -64,11 +111,36 @@ const AdminLeads: React.FC = () => {
 
   const [form, setForm] = useState({
     name: "",
+    email: "",
+    phone: "",
     source: "",
     status: "pending_contact",
     comments: "",
     referred_by: "none",
   })
+
+  const [desktopPermission, setDesktopPermission] = useState<NotificationPermission>(() => {
+    return typeof window !== 'undefined' && 'Notification' in window
+      ? Notification.permission
+      : 'default'
+  })
+
+  const handleEnableDesktopNotifications = async () => {
+    const res = await requestDesktopNotificationPermission()
+    setDesktopPermission(res)
+    if (res === 'granted') {
+      toast({
+        title: "🔔 Notificações ativadas!",
+        description: "Você será avisado no seu computador assim que entrar um novo lead.",
+      })
+    } else if (res === 'denied') {
+      toast({
+        title: "Permissão bloqueada",
+        description: "As notificações estão bloqueadas nas configurações do seu navegador.",
+        variant: "destructive",
+      })
+    }
+  }
 
   // Check if user selected "referral" from source dropdown
   const isReferral = form.source === 'referral'
@@ -102,11 +174,29 @@ const AdminLeads: React.FC = () => {
 
   useEffect(() => {
     fetchLeads()
+
+    // Real-time listener for incoming leads from the website!
+    const channel = supabase
+      .channel('admin_leads_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'leads' },
+        () => {
+          fetchLeads()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   const resetForm = () => {
     setForm({
       name: "",
+      email: "",
+      phone: "",
       source: "",
       status: "pending_contact",
       comments: "",
@@ -124,6 +214,8 @@ const AdminLeads: React.FC = () => {
       setLoading(true)
       const payload: any = {
         name: form.name,
+        email: form.email || null,
+        phone: form.phone || null,
         source: form.source || null,
         status: form.status,
         comments: form.comments || null,
@@ -146,8 +238,11 @@ const AdminLeads: React.FC = () => {
 
   const handleEditClick = (lead: Lead) => {
     setSelectedLead(lead)
+    const { phone, email } = getLeadDetails(lead)
     setForm({
       name: lead.name,
+      email: lead.email || email || "",
+      phone: lead.phone || phone || "",
       source: lead.source || "",
       status: lead.status,
       comments: lead.comments || "",
@@ -162,6 +257,8 @@ const AdminLeads: React.FC = () => {
       setLoading(true)
       const payload: any = {
         name: form.name,
+        email: form.email || null,
+        phone: form.phone || null,
         source: form.source || null,
         status: form.status,
         comments: form.comments || null,
@@ -344,6 +441,37 @@ const AdminLeads: React.FC = () => {
               onChange={e => setSearchQuery(e.target.value)}
             />
           </div>
+
+          {desktopPermission !== 'granted' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleEnableDesktopNotifications}
+              className="shrink-0 text-xs border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-200 hover:bg-amber-100"
+              title="Receber avisos no seu Mac/Windows mesmo com a aba em segundo plano"
+            >
+              <BellRing className="w-3.5 h-3.5 mr-1.5 text-amber-600 dark:text-amber-400" />
+              <span className="hidden sm:inline">Ativar Notificações</span>
+            </Button>
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              playLeadNotificationSound();
+              toast({
+                title: "🔔 Teste de Som",
+                description: "Este é o som que tocará quando um novo lead entrar!",
+              });
+            }}
+            title="Testar alarme sonoro de novo lead"
+            className="shrink-0 text-xs"
+          >
+            <Volume2 className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
+            <span className="hidden sm:inline">Testar Som</span>
+          </Button>
+
           <Button onClick={() => { resetForm(); setOpenCreate(true); }} className="shrink-0 shadow-sm">
             <UserPlus className="w-4 h-4 md:mr-2" />
             <span className="hidden md:inline">Add Lead</span>
@@ -385,47 +513,104 @@ const AdminLeads: React.FC = () => {
                       No active leads here
                     </div>
                   ) : (
-                    columnLeads.map(lead => (
-                      <Card key={lead.id} className="shadow-sm hover:shadow-md transition-shadow group relative">
-                        <CardContent className="p-4">
-                          <div className="flex justify-between items-start mb-2">
-                            <h4 className="font-semibold text-[15px] pr-8 truncate" title={lead.name}>
-                              {lead.name}
-                            </h4>
-                            <div className="absolute top-4 right-3 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-background/80 backdrop-blur-sm rounded-md shadow-sm border border-border">
-                              <button 
-                                onClick={() => handleEditClick(lead)}
-                                className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-colors"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                              <button 
-                                onClick={() => { setSelectedLead(lead); setOpenDelete(true); }}
-                                className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                    columnLeads.map(lead => {
+                      const { phone, email, level, course, frequency } = getLeadDetails(lead)
+                      const waLink = phone ? getWhatsAppLink(phone, lead.name) : null
+
+                      return (
+                      <Card key={lead.id} className="shadow-sm hover:shadow-md transition-shadow group relative bg-card">
+                        <CardContent className="p-4 flex flex-col justify-between h-full">
+                          <div>
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="pr-8">
+                                <h4 className="font-semibold text-[15px] truncate" title={lead.name}>
+                                  {lead.name}
+                                </h4>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {new Date(lead.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                              <div className="absolute top-4 right-3 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-background/80 backdrop-blur-sm rounded-md shadow-sm border border-border">
+                                <button 
+                                  onClick={() => handleEditClick(lead)}
+                                  className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-colors"
+                                  title="Edit Lead"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button 
+                                  onClick={() => { setSelectedLead(lead); setOpenDelete(true); }}
+                                  className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                                  title="Delete Lead"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                          
-                          <div className="flex flex-wrap gap-1.5 flex-col items-start mb-3">
-                            {lead.source && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-secondary text-secondary-foreground">
-                                {lead.source}
-                              </span>
+                            
+                            {/* Badges / Source & Tags */}
+                            <div className="flex flex-wrap gap-1.5 items-center mb-3">
+                              {lead.source && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-secondary text-secondary-foreground">
+                                  {lead.source === 'website' ? '🌐 Website' : lead.source}
+                                </span>
+                              )}
+                              {level && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                                  🎯 {level}
+                                </span>
+                              )}
+                              {course && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                  📚 {course}
+                                </span>
+                              )}
+                              {frequency && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700">
+                                  ⏰ {frequency}
+                                </span>
+                              )}
+                              {lead.referred_by && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700 border border-purple-200">
+                                  ⭐ Referred by {getStudentName(lead.referred_by)}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Direct WhatsApp & Email Buttons */}
+                            {(waLink || email) && (
+                              <div className="flex flex-wrap gap-1.5 mb-3">
+                                {waLink && (
+                                  <a 
+                                    href={waLink} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors shadow-sm"
+                                    title="Chamar no WhatsApp com 1 clique"
+                                  >
+                                    <MessageSquare className="w-3.5 h-3.5" />
+                                    <span>{phone}</span>
+                                  </a>
+                                )}
+                                {email && (
+                                  <a 
+                                    href={`mailto:${email}`}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-muted hover:bg-muted/80 text-foreground transition-colors"
+                                    title={`Enviar e-mail para ${email}`}
+                                  >
+                                    <Mail className="w-3.5 h-3.5 text-muted-foreground" />
+                                    <span className="truncate max-w-[150px]">{email}</span>
+                                  </a>
+                                )}
+                              </div>
                             )}
-                            {lead.referred_by && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700 border border-purple-200">
-                                ⭐ Referred by {getStudentName(lead.referred_by)}
-                              </span>
+                            
+                            {lead.comments && (
+                              <p className="text-xs text-muted-foreground line-clamp-3 mb-4 leading-relaxed whitespace-pre-line bg-muted/40 p-2 rounded-md border border-muted">
+                                {lead.comments}
+                              </p>
                             )}
                           </div>
-                          
-                          {lead.comments && (
-                            <p className="text-xs text-muted-foreground line-clamp-2 mb-4 leading-relaxed">
-                              {lead.comments}
-                            </p>
-                          )}
                           
                           <div className="pt-3 border-t mt-auto">
                             <Select 
@@ -446,7 +631,7 @@ const AdminLeads: React.FC = () => {
                           </div>
                         </CardContent>
                       </Card>
-                    ))
+                    )})
                   )}
                 </div>
               </div>
@@ -557,21 +742,38 @@ const AdminLeads: React.FC = () => {
             closedLeads.map(lead => {
               const statusConfig = ALL_STATUSES.find(s => s.id === lead.status)
               const Icon = statusConfig?.icon || CheckCircle2
+              const { phone } = getLeadDetails(lead)
+              const waLink = phone ? getWhatsAppLink(phone, lead.name) : null
 
               return (
                 <Card key={lead.id} className="relative group">
                   <CardContent className="p-4">
-                    <div className="flex justify-between items-start mb-3">
+                    <div className="flex justify-between items-start mb-2">
                       <div className="pr-6">
                         <h4 className="font-semibold text-sm truncate" title={lead.name}>{lead.name}</h4>
                         <p className="text-xs text-muted-foreground">
-                          {new Date(lead.created_at).toLocaleDateString()}
+                          {new Date(lead.created_at).toLocaleDateString('pt-BR')}
                         </p>
                       </div>
                       <div className={`p-1.5 rounded-full ${statusConfig?.color}`}>
                          <Icon className="w-4 h-4" />
                       </div>
                     </div>
+
+                    {waLink && (
+                      <div className="mb-3">
+                        <a 
+                          href={waLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                          title="Conversar no WhatsApp"
+                        >
+                          <MessageSquare className="w-3 h-3" />
+                          <span>WhatsApp</span>
+                        </a>
+                      </div>
+                    )}
 
                     <div className="flex gap-2">
                        <Button variant="outline" size="sm" className="w-full text-xs h-8" onClick={() => handleEditClick(lead)}>
@@ -675,6 +877,26 @@ const AdminLeads: React.FC = () => {
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder="E.g. Jane Smith"
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>WhatsApp / Telefone</Label>
+                <Input
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  placeholder="(00) 90000-0000"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>E-mail</Label>
+                <Input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="exemplo@email.com"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

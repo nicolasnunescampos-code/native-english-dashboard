@@ -50,9 +50,10 @@ interface ReadOnlyCalendarProps {
     role: 'student' | 'teacher';
     identifier: string; // studentName or teacherName
     compact?: boolean;
+    onEventClick?: (event: CalendarClassEvent) => void;
 }
 
-export const ReadOnlyCalendar: React.FC<ReadOnlyCalendarProps> = ({ role, identifier, compact }) => {
+export const ReadOnlyCalendar: React.FC<ReadOnlyCalendarProps> = ({ role, identifier, compact, onEventClick }) => {
     const { toast } = useToast();
     const [events, setEvents] = useState<CalendarClassEvent[]>([]);
     const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -304,6 +305,9 @@ export const ReadOnlyCalendar: React.FC<ReadOnlyCalendarProps> = ({ role, identi
                 max={max}
                 eventPropGetter={eventStyleGetter}
                 onRangeChange={handleRangeChange}
+                onSelectEvent={(event) => {
+                    if (onEventClick) onEventClick(event);
+                }}
                 popup
                 selectable={false} // Read only
                 toolbar={!compact} // Hide toolbar in compact mode if desired, but actually week switching is useful! Let's keep toolbar so they can switch weeks.

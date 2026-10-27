@@ -103,7 +103,7 @@ const StudentClasses: React.FC = () => {
         student_id: user.id,
         status: 'pending',
         date: cls.date, // optional reference
-        notes: `Rescheduled from ${cls.date} ${cls.time}`
+        notes: `Cancelled by student. Rescheduled from ${cls.date} ${cls.time}`
       });
       if (recupError) throw recupError;
 
@@ -119,6 +119,22 @@ const StudentClasses: React.FC = () => {
             is_read: false
           });
         }
+      }
+
+      // 4. Notify admins so they can slot the extra class and add to personal calendar
+      try {
+        const { data: admins } = await supabase.from('admins').select('id');
+        if (admins && admins.length > 0) {
+          const adminMsgs = admins.map(a => ({
+            sender_id: user.id,
+            receiver_id: a.id,
+            content: `🔔 Recuperation Alert: ${studentName || 'A student'} rescheduled class on ${cls.date} at ${cls.time}. Please schedule their extra class in the Admin Calendar tray and remember to add it to your personal Google Calendar!`,
+            is_read: false,
+          }));
+          await supabase.from('messages').insert(adminMsgs);
+        }
+      } catch (adminErr) {
+        console.error("Failed to notify admins of reschedule", adminErr);
       }
 
       toast.success('Class rescheduled! A recuperation credit has been added.');

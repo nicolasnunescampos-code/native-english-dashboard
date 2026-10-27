@@ -4,89 +4,106 @@ import { useAuth } from "@/contexts/AuthContext"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, ExternalLink, MessageSquare, CalendarClock } from "lucide-react"
-import { toast } from "sonner"
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import { format, parseISO } from "date-fns"
-import { toLocalDate, formatClassTime, getTimeZoneLabel } from "@/lib/dateUtils"
-import { fetchStudentNextChapters, NextChapterInfo, ClassType, fetchUpcomingClassType } from "@/lib/courseUtils"
+  Calendar,
+  MessageSquare,
+  Zap,
+  Trophy,
+  Mic,
+  Award,
+  Star,
+  Megaphone,
+  X,
+  ChevronRight,
+  Sparkles,
+} from "lucide-react"
+import { toast } from "sonner"
+import { format, parseISO, differenceInCalendarDays, startOfWeek } from "date-fns"
+import {
+  fetchStudentNextChapters,
+  NextChapterInfo,
+  ClassType,
+  fetchUpcomingClassType,
+} from "@/lib/courseUtils"
 import { Link } from "react-router-dom"
 import { ReadOnlyCalendar } from "@/components/calendar/ReadOnlyCalendar"
+import { NotificationIncentiveBanner } from "@/components/notifications/NotificationIncentiveBanner"
+import { CompactNativeQuestRankCard } from "@/components/grammar-rush/CompactNativeQuestRankCard"
 
-const extractClassName = (title: string, studentName?: string) => {
-  if (!title) return 'Class';
-  if (!title.includes(' - ')) return studentName ? `${studentName.split(' ')[0]}'s class` : 'Class';
-  const parts = title.split(' - ');
-  return parts[0].trim();
-};
+const TOTAL_COURSE_CLASSES = 160
 
 const extractTeacherName = (title: string) => {
-  if (!title) return '';
-  if (!title.includes(' - ')) return title;
-  const parts = title.split(' - ');
-  return parts.length > 1 ? parts[1].trim() : '';
-};
+  if (!title) return ""
+  if (!title.includes(" - ")) return title
+  const parts = title.split(" - ")
+  return parts.length > 1 ? parts[1].trim() : ""
+}
+
+const formatOrdinalDay = (day: number) => {
+  const j = day % 10
+  const k = day % 100
+  if (j === 1 && k !== 11) return `${day}st`
+  if (j === 2 && k !== 12) return `${day}nd`
+  if (j === 3 && k !== 13) return `${day}rd`
+  return `${day}th`
+}
 
 const StudentDashboard: React.FC = () => {
   const { studentName, user } = useAuth()
 
   const [nextClass, setNextClass] = useState<Class | null>(null)
-  const [nextChapters, setNextChapters] = useState<Partial<Record<ClassType, NextChapterInfo>>>({})
-  const [upcomingClassType, setUpcomingClassType] = useState<ClassType | null>(null)
+  const [nextChapters, setNextChapters] = useState<
+    Partial<Record<ClassType, NextChapterInfo>>
+  >({})
+  const [upcomingClassType, setUpcomingClassType] = useState<ClassType | null>(
+    null
+  )
   const [upcomingExamCompleted, setUpcomingExamCompleted] = useState(false)
   const [lastClass, setLastClass] = useState<Class | null>(null)
   const [pendingPayment, setPendingPayment] = useState<Payment | null>(null)
-  const [paymentDueDay, setPaymentDueDay] = useState<number>(9)
+  // Default payment due day is the 5th of each month unless overridden in student profile
+  const [paymentDueDay, setPaymentDueDay] = useState<number>(5)
   const [latestAnnouncement, setLatestAnnouncement] =
     useState<Announcement | null>(null)
+  const [announcementDismissed, setAnnouncementDismissed] =
+    useState<boolean>(false)
   const [loading, setLoading] = useState(true)
   const [unreadMessages, setUnreadMessages] = useState(0)
+
+  // Performance & Progress Hub Metrics
+  const [completedClassesCount, setCompletedClassesCount] = useState<number>(0)
+  const [overallGradeAvg, setOverallGradeAvg] = useState<number>(0)
+  const [grammarWeeklyBest, setGrammarWeeklyBest] = useState<number>(0)
+  const [grammarAvgAccuracy, setGrammarAvgAccuracy] = useState<number>(0)
+  const [speakingAvgScore, setSpeakingAvgScore] = useState<number>(0)
+  const [speakingTotalAttempts, setSpeakingTotalAttempts] = useState<number>(0)
 
   useEffect(() => {
     if (!studentName || !user?.email) {
       setLoading(false)
       return
     }
-    const userEmail = user.email;
+    const userEmail = user.email
 
     const loadDashboard = async () => {
-      console.log('StudentDashboard: Loading dashboard data...'); // Force HMR
-      const today = format(new Date(), 'yyyy-MM-dd')
-      let studentId = "";
+      const today = format(new Date(), "yyyy-MM-dd")
+      let studentId = ""
 
       // 0. Fetch Student ID and Settings
       const { data: studentData } = await supabase
-        .from('students')
-        .select('id, payment_due_day')
-        .ilike('email', userEmail!)
-        .maybeSingle();
+        .from("students")
+        .select("id, payment_due_day")
+        .ilike("email", userEmail!)
+        .maybeSingle()
 
       if (studentData) {
-        studentId = studentData.id;
-        if (studentData.payment_due_day) setPaymentDueDay(studentData.payment_due_day);
+        studentId = studentData.id
+        setPaymentDueDay(studentData.payment_due_day || 5)
       }
 
+      // NEXT CLASS (Legacy + Relational)
+      let nextClassData: any = null
 
-      // NEXT CLASS (Relational)
-      // We need classes where:
-      // A) student_name == studentName (Legacy)
-      // OR
-      // B) id IN (select class_id from class_assignments where student_id == studentId)
-      // AND date >= today
-
-      let nextClassData: any = null;
-
-      // Fetch Legacy
       const { data: legacyNext } = await supabase
         .from("classes")
         .select("*")
@@ -96,64 +113,63 @@ const StudentDashboard: React.FC = () => {
         .order("time", { ascending: true })
         .limit(15)
 
-      // Fetch Relational
-      let relationalNext: any[] = [];
+      let relationalNext: any[] = []
       if (studentId) {
         const { data: newClasses } = await supabase
           .from("classes")
-          .select(`
+          .select(
+            `
             *,
             class_assignments!inner(student_id)
-          `)
+          `
+          )
           .eq("class_assignments.student_id", studentId)
           .gte("date", today)
           .order("date", { ascending: true })
-          .limit(15);
+          .limit(15)
 
         if (newClasses) {
           relationalNext = newClasses.map((cls: any) => ({
             ...cls,
             time: cls.start_time || cls.time,
             title: cls.title,
-            link_url: cls.link_url
-          }));
+            link_url: cls.link_url,
+          }))
         }
       }
 
-      // Combine and Sort
-      const allClasses = [...(legacyNext || []), ...relationalNext];
-      
+      const allClasses = [...(legacyNext || []), ...relationalNext]
+
       const getMinutes = (tStr: string) => {
-        if (!tStr) return 0;
-        if (tStr.includes('T')) {
-            const d = new Date(tStr);
-            return d.getHours() * 60 + d.getMinutes();
+        if (!tStr) return 0
+        if (tStr.includes("T")) {
+          const d = new Date(tStr)
+          return d.getHours() * 60 + d.getMinutes()
         }
-        const [h, m] = tStr.split(':').map(Number);
-        return (h || 0) * 60 + (m || 0);
-      };
+        const [h, m] = tStr.split(":").map(Number)
+        return (h || 0) * 60 + (m || 0)
+      }
 
       if (allClasses.length > 0) {
-        // Deduplicate
-        const uniqueClasses = Array.from(new Map(allClasses.map(item => [item.id, item])).values());
-        
+        const uniqueClasses = Array.from(
+          new Map(allClasses.map((item) => [item.id, item])).values()
+        )
+
         uniqueClasses.sort((a, b) => {
-            if (a.date !== b.date) return a.date.localeCompare(b.date);
-            return getMinutes(a.time) - getMinutes(b.time);
-        });
+          if (a.date !== b.date) return a.date.localeCompare(b.date)
+          return getMinutes(a.time) - getMinutes(b.time)
+        })
 
-        // Find the first class that hasn't finished yet (assuming 1hr duration)
-        const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
-        const upcomingClass = uniqueClasses.find(cls => {
-            if (cls.date > today) return true;
-            if (cls.date === today) {
-                // Keep showing it if it started less than 60 mins ago
-                return getMinutes(cls.time) + 60 >= nowMins;
-            }
-            return false;
-        });
+        const nowMins = new Date().getHours() * 60 + new Date().getMinutes()
+        const upcomingClass = uniqueClasses.find((cls) => {
+          if (cls.date > today) return true
+          if (cls.date === today) {
+            return getMinutes(cls.time) + 60 >= nowMins
+          }
+          return false
+        })
 
-        nextClassData = upcomingClass || null;
+        nextClassData = upcomingClass || null
       }
 
       setNextClass(nextClassData)
@@ -164,39 +180,61 @@ const StudentDashboard: React.FC = () => {
       const upcomingType = await fetchUpcomingClassType(studentName)
       setUpcomingClassType(upcomingType)
 
-      let isExamCompleted = false;
-      if (studentId && upcomingType === 'Exam') {
+      let isExamCompleted = false
+      if (studentId && upcomingType === "Exam") {
         const { data: subs } = await supabase
-          .from('exam_submissions')
-          .select('completed_at')
-          .eq('student_id', studentId)
-          .order('created_at', { ascending: false })
-          .limit(1);
-          
+          .from("exam_submissions")
+          .select("completed_at")
+          .eq("student_id", studentId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+
         if (subs && subs.length > 0 && subs[0].completed_at) {
-          isExamCompleted = true;
+          isExamCompleted = true
         }
       }
       setUpcomingExamCompleted(isExamCompleted)
 
-      // LAST GRADED CLASS
-      // 1. Legacy Query
-      let lastGradedClass: Class | null = null;
-
-      const { data: legacyLast } = await supabase
+      // GRADED CLASSES FOR COURSE COMPLETION & OVERALL GRADE AVG
+      const { data: gradedClasses } = await supabase
         .from("classes")
-        .select("*")
+        .select(
+          "id, class_grade, speaking_grade, listening_grade, grammar_grade, reading_grade, is_absent, class_level, class_chapter, date"
+        )
         .ilike("student_name", `%${studentName}%`)
-        .not("class_grade", "is", null)
+        .or(
+          "speaking_grade.not.is.null,class_grade.not.is.null,grammar_grade.not.is.null,reading_grade.not.is.null,listening_grade.not.is.null"
+        )
         .order("date", { ascending: false })
-        .limit(1)
-        .maybeSingle()
 
-      // 2. Relational Query
-      lastGradedClass = legacyLast;
-
-      setLastClass(lastGradedClass)
-
+      const validCompleted = (gradedClasses || []).filter(
+        (c: any) => !c.is_absent
+      )
+      setCompletedClassesCount(validCompleted.length)
+      if (validCompleted.length > 0) {
+        setLastClass(validCompleted[0] as Class)
+        const gradesPool: number[] = []
+        validCompleted.forEach((cls: any) => {
+          if (cls.speaking_grade != null) gradesPool.push(cls.speaking_grade)
+          if (cls.listening_grade != null) gradesPool.push(cls.listening_grade)
+          if (cls.grammar_grade != null) gradesPool.push(cls.grammar_grade)
+          if (cls.reading_grade != null) gradesPool.push(cls.reading_grade)
+          if (
+            cls.class_grade != null &&
+            cls.speaking_grade == null &&
+            cls.listening_grade == null &&
+            cls.grammar_grade == null &&
+            cls.reading_grade == null
+          ) {
+            gradesPool.push(cls.class_grade)
+          }
+        })
+        if (gradesPool.length > 0) {
+          const avg =
+            gradesPool.reduce((a, b) => a + b, 0) / gradesPool.length
+          setOverallGradeAvg(avg)
+        }
+      }
 
       // CURRENT PAYMENT (MONTH)
       const { data: payments } = await supabase
@@ -204,25 +242,27 @@ const StudentDashboard: React.FC = () => {
         .select("*")
         .eq("student_name", studentName)
         .order("due_date", { ascending: false })
-        .limit(50) // Increased limit to ensure we find current month even if future payments exist
+        .limit(50)
 
       let currentPayment = null
       if (payments && payments.length > 0) {
         const now = new Date()
         const currentMonthPayments = payments.filter((p) => {
-          if (!p.due_date) return true; // Include edge-function created initial payments
-          const [year, month] = p.due_date.split('-');
+          if (!p.due_date) return true
+          const [year, month] = p.due_date.split("-")
           return (
             parseInt(year, 10) === now.getFullYear() &&
             parseInt(month, 10) === now.getMonth() + 1
           )
-        });
+        })
 
         if (currentMonthPayments.length > 0) {
-          currentPayment = currentMonthPayments.find(p => p.status === 'paid') || currentMonthPayments[0];
+          currentPayment =
+            currentMonthPayments.find((p) => p.status === "paid") ||
+            currentMonthPayments[0]
         } else {
-          // Fallback to the latest known payment (prevents random 'No Slip' if billed late)
-          currentPayment = payments.find(p => p.status === 'paid') || payments[0];
+          currentPayment =
+            payments.find((p) => p.status === "paid") || payments[0]
         }
       }
 
@@ -237,6 +277,12 @@ const StudentDashboard: React.FC = () => {
         .maybeSingle()
 
       setLatestAnnouncement(announcement ?? null)
+      if (announcement) {
+        const dismissKey = `dismissed_announcement_${
+          announcement.id || announcement.date || announcement.title
+        }`
+        setAnnouncementDismissed(localStorage.getItem(dismissKey) === "true")
+      }
 
       // UNREAD MESSAGES
       if (user?.id) {
@@ -249,6 +295,67 @@ const StudentDashboard: React.FC = () => {
         setUnreadMessages(count || 0)
       }
 
+      // SPEAKING LAB STATS
+      const targetStudentId = studentId || user?.id
+      try {
+        const speakingQuery = targetStudentId
+          ? supabase
+              .from("student_speaking_attempts")
+              .select("score")
+              .eq("student_id", targetStudentId)
+          : supabase
+              .from("student_speaking_attempts")
+              .select("score")
+              .ilike("student_name", `%${studentName}%`)
+
+        const { data: speakingData } = await speakingQuery
+        if (speakingData && speakingData.length > 0) {
+          setSpeakingTotalAttempts(speakingData.length)
+          const avg = Math.round(
+            speakingData.reduce((s: number, a: any) => s + Number(a.score || 0), 0) /
+              speakingData.length
+          )
+          setSpeakingAvgScore(avg)
+        }
+      } catch {
+        // non-blocking
+      }
+
+      // GRAMMAR RUSH STATS (Weekly Best Score & Overall Accuracy)
+      if (targetStudentId) {
+        try {
+          const weekStartIso = startOfWeek(new Date(), {
+            weekStartsOn: 1,
+          }).toISOString()
+          const { data: rushSessions } = await supabase
+            .from("grammar_game_sessions")
+            .select("score, accuracy, created_at")
+            .eq("student_id", targetStudentId)
+            .order("created_at", { ascending: false })
+            .limit(100)
+
+          if (rushSessions && rushSessions.length > 0) {
+            const weekly = rushSessions.filter(
+              (s: any) => s.created_at && s.created_at >= weekStartIso
+            )
+            const poolForBest = weekly.length > 0 ? weekly : rushSessions
+            const best = Math.max(
+              ...poolForBest.map((s: any) => Number(s.score || 0))
+            )
+            const avgAcc = Math.round(
+              rushSessions.reduce(
+                (acc: number, s: any) => acc + Number(s.accuracy || 0),
+                0
+              ) / rushSessions.length
+            )
+            setGrammarWeeklyBest(best)
+            setGrammarAvgAccuracy(avgAcc)
+          }
+        } catch {
+          // Non-blocking if table not yet migrated
+        }
+      }
+
       setLoading(false)
     }
 
@@ -257,13 +364,13 @@ const StudentDashboard: React.FC = () => {
     // Realtime listener for messages on dashboard
     if (user?.id) {
       const channel = supabase
-        .channel('dashboard_unread_messages')
+        .channel("dashboard_unread_messages")
         .on(
-          'postgres_changes',
+          "postgres_changes",
           {
-            event: '*',
-            schema: 'public',
-            table: 'messages',
+            event: "*",
+            schema: "public",
+            table: "messages",
             filter: `receiver_id=eq.${user.id}`,
           },
           async () => {
@@ -283,45 +390,83 @@ const StudentDashboard: React.FC = () => {
     }
   }, [studentName, user?.id])
 
-  const confirmReschedule = async (cls: Class) => {
+  const isAnnouncementNew = React.useMemo(() => {
+    if (!latestAnnouncement) return false
+    const dateStr =
+      (latestAnnouncement as any).created_at || latestAnnouncement.date
+    if (!dateStr) return false
+
     try {
-      if (!user) throw new Error("Not logged in");
-      
-      // 1. Delete class
-      const { error: deleteError } = await supabase.from('classes').delete().eq('id', cls.id);
-      if (deleteError) throw deleteError;
-
-      // 2. Add recuperation
-      const { error: recupError } = await supabase.from('recuperation_classes').insert({
-        student_id: user.id,
-        status: 'pending',
-        date: cls.date, // optional reference
-        notes: `Rescheduled from ${cls.date} ${cls.time}`
-      });
-      if (recupError) throw recupError;
-
-      // 3. Notify teacher (optional, doing it if possible)
-      const teacherName = extractTeacherName(cls.title);
-      if (teacherName) {
-        const { data: teacherData } = await supabase.from('teachers').select('id').ilike('name', teacherName).maybeSingle();
-        if (teacherData) {
-          await supabase.from('messages').insert({
-            sender_id: user.id,
-            receiver_id: teacherData.id,
-            content: `Hello! I have rescheduled our class on ${cls.date} at ${cls.time}. A recuperation has been added to my account.`,
-            is_read: false
-          });
-        }
+      let annDate: Date
+      if (typeof dateStr === "string" && dateStr.includes("T")) {
+        annDate = parseISO(dateStr)
+      } else if (
+        typeof dateStr === "string" &&
+        /^\d{4}-\d{2}-\d{2}$/.test(dateStr)
+      ) {
+        const [y, m, d] = dateStr.split("-").map(Number)
+        annDate = new Date(y, m - 1, d)
+      } else {
+        annDate = new Date(dateStr)
       }
 
-      toast.success('Class rescheduled! A recuperation credit has been added.');
-      setNextClass(null); // Clear the next class
-
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err.message || 'Failed to reschedule.');
+      const daysDiff = differenceInCalendarDays(new Date(), annDate)
+      return daysDiff >= 0 && daysDiff <= 5
+    } catch {
+      return false
     }
-  };
+  }, [latestAnnouncement])
+
+  // Determine if payment is pending AND actually due/overdue (on or after the 5th / paymentDueDay, or from a past month)
+  const isPaymentRed = React.useMemo(() => {
+    if (!pendingPayment || pendingPayment.status === "paid") return false
+
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const currentMonth = now.getMonth() + 1
+    const currentDay = now.getDate()
+    const dueDayOfMonth = paymentDueDay || 5
+
+    if (pendingPayment.due_date) {
+      const parts = pendingPayment.due_date.split("-").map(Number)
+      if (parts.length >= 2) {
+        const [pYear, pMonth] = parts
+        // If slip is from an earlier month/year, it is already overdue
+        if (
+          pYear < currentYear ||
+          (pYear === currentYear && pMonth < currentMonth)
+        ) {
+          return true
+        }
+        // If slip is for a future month, not red yet
+        if (
+          pYear > currentYear ||
+          (pYear === currentYear && pMonth > currentMonth)
+        ) {
+          return false
+        }
+      }
+    }
+
+    // Current month slip: only turns red on or after the due day (e.g. the 5th)
+    return currentDay >= dueDayOfMonth
+  }, [pendingPayment, paymentDueDay])
+
+  const handleDismissAnnouncement = () => {
+    if (!latestAnnouncement) return
+    const dismissKey = `dismissed_announcement_${
+      latestAnnouncement.id ||
+      latestAnnouncement.date ||
+      latestAnnouncement.title
+    }`
+    localStorage.setItem(dismissKey, "true")
+    setAnnouncementDismissed(true)
+  }
+
+  const courseCompletionPct = Math.min(
+    100,
+    Math.round((completedClassesCount / TOTAL_COURSE_CLASSES) * 100)
+  )
 
   if (loading) {
     return (
@@ -340,163 +485,296 @@ const StudentDashboard: React.FC = () => {
     )
   }
 
-  return (
-    <div className="space-y-8">
+  // ============================================================
+  // BENTO CARDS DEFINITIONS
+  // ============================================================
 
+  // 1. THIS WEEK'S SCHEDULE CARD (Calendar Resume)
+  const ScheduleCard = (
+    <Card key="schedule-card" className="flex flex-col">
+      <CardHeader className="flex flex-row items-center justify-between pb-4">
+        <CardTitle className="flex items-center gap-3 text-lg">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-sky-400/20 to-blue-600/20 border border-sky-400/30 flex items-center justify-center text-primary shadow-sm">
+            <Calendar className="w-5 h-5" />
+          </div>
+          <span>This Week's Schedule</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4 flex-1 flex flex-col">
+        <div className="rounded-2xl border border-white/50 dark:border-white/10 overflow-hidden flex-1 bg-white/30 dark:bg-slate-950/20">
+          <ReadOnlyCalendar
+            role="student"
+            identifier={studentName || ""}
+            compact={true}
+          />
+        </div>
+        <Button asChild className="w-full font-semibold">
+          <Link to="/student/classes">See full schedule</Link>
+        </Button>
+      </CardContent>
+    </Card>
+  )
 
-      {/* GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* SCHEDULE COMPACT VIEW */}
-        <Card className="shadow-sm hover:shadow-md transition">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              📅 This Week's Schedule
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-md border overflow-hidden">
-              <ReadOnlyCalendar role="student" identifier={studentName || ''} compact={true} />
-            </div>
-            <Button asChild className="w-full font-semibold">
-              <Link to="/student/classes">See full schedule</Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* ANNOUNCEMENTS */}
-        <Card className="shadow-sm hover:shadow-md transition">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>📢 Latest Announcement</CardTitle>
-            <Link
-              to="/student/announcements"
-              className="text-sm text-primary hover:underline"
-            >
-              View all
-            </Link>
-          </CardHeader>
-          <CardContent>
-            {latestAnnouncement ? (
-              <div className="space-y-2">
-                <p className="font-semibold">
-                  {latestAnnouncement.title}
+  // 3. MESSAGES CARD
+  const MessagesCard = (
+    <Card key="messages-card" className="flex flex-col">
+      <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <CardTitle className="flex items-center gap-3 text-lg">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-400/20 to-purple-600/20 border border-indigo-400/30 flex items-center justify-center text-primary shadow-sm">
+            <MessageSquare className="w-5 h-5" />
+          </div>
+          <span>Messages</span>
+        </CardTitle>
+        <Link
+          to="/student/messages"
+          className="text-xs font-semibold px-3 py-1.5 rounded-full liquid-glass-pill text-primary hover:underline"
+        >
+          Open chat
+        </Link>
+      </CardHeader>
+      <CardContent className="flex-1 flex flex-col justify-between">
+        {unreadMessages > 0 ? (
+          <div className="space-y-4">
+            <div className="bg-emerald-500/10 backdrop-blur-md p-4 rounded-2xl flex items-center justify-between border border-emerald-500/25">
+              <div>
+                <p className="font-bold text-emerald-600 dark:text-emerald-400">
+                  New Messages
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {latestAnnouncement.message}
+                  You have {unreadMessages} unread message
+                  {unreadMessages !== 1 ? "s" : ""}.
                 </p>
               </div>
-            ) : (
-              <p className="text-muted-foreground">
-                No announcements yet
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* MESSAGES */}
-        <Card className="shadow-sm hover:shadow-md transition">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-primary" />
-              Messages
-            </CardTitle>
-            <Link
-              to="/student/messages"
-              className="text-sm text-primary hover:underline"
-            >
-              Open chat
-            </Link>
-          </CardHeader>
-          <CardContent>
-            {unreadMessages > 0 ? (
-              <div className="space-y-4">
-                <div className="bg-green-500/10 p-4 rounded-lg flex items-center justify-between border border-green-500/20">
-                  <div>
-                    <p className="font-semibold text-green-600">New Messages</p>
-                    <p className="text-sm text-muted-foreground">
-                      You have {unreadMessages} unread message{unreadMessages !== 1 ? 's' : ''}.
-                    </p>
-                  </div>
-                  <div className="w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center font-bold text-lg shadow-sm">
-                    {unreadMessages}
-                  </div>
-                </div>
-                <Button asChild className="w-full bg-green-500 hover:bg-green-600 text-white">
-                  <Link to="/student/messages">Read Messages</Link>
-                </Button>
+              <div className="w-10 h-10 bg-emerald-500 text-white rounded-2xl flex items-center justify-center font-bold text-lg shadow-[0_4px_12px_rgba(16,185,129,0.4)]">
+                {unreadMessages}
               </div>
-            ) : (
-              <div className="space-y-4 text-center py-2">
-                <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mx-auto mb-2">
-                  <MessageSquare className="w-6 h-6 text-muted-foreground" />
-                </div>
-                <p className="text-muted-foreground">
-                  No new messages.
-                </p>
-                <Button variant="outline" asChild className="w-full">
-                  <Link to="/student/messages">Send a message</Link>
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* BILLING */}
-        <Card className={`shadow-sm transition-all duration-300 ${
-           pendingPayment 
-             ? pendingPayment.status !== 'paid' 
-               ? 'border-2 border-red-500 bg-red-50/80 dark:bg-red-950/20 shadow-red-500/10' 
-               : 'border-2 border-green-500 bg-green-50/80 dark:bg-green-950/20 shadow-green-500/10'
-             : 'hover:shadow-md'
-        }`}>
-          <CardHeader className="pb-2">
-            <CardTitle className={
-              pendingPayment 
-                ? pendingPayment.status !== 'paid' 
-                  ? 'text-red-700 dark:text-red-400 font-bold flex items-center gap-2' 
-                  : 'text-green-700 dark:text-green-400 font-bold flex items-center gap-2'
-                : ''
-            }>
-              💳 Billing Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between pb-3">
-              <div>
-                <p className={`text-sm font-medium ${
-                  pendingPayment 
-                    ? pendingPayment.status !== 'paid' 
-                      ? 'text-red-800 dark:text-red-300' 
-                      : 'text-green-800 dark:text-green-300'
-                    : 'text-muted-foreground'
-                }`}>
-                  Current month <span className="opacity-70 font-normal ml-1">(Due on the {(() => {
-                    const j = paymentDueDay % 10, k = paymentDueDay % 100;
-                    if (j === 1 && k !== 11) return paymentDueDay + "st";
-                    if (j === 2 && k !== 12) return paymentDueDay + "nd";
-                    if (j === 3 && k !== 13) return paymentDueDay + "rd";
-                    return paymentDueDay + "th";
-                  })()})</span>
-                </p>
-              </div>
-
-              {pendingPayment ? (
-                pendingPayment.status === "paid" ? (
-                  <Badge className="bg-success/10 text-success">Paid</Badge>
-                ) : (
-                  <Badge variant="destructive" className="animate-pulse shadow-md shadow-red-500/30 px-3 py-1 font-bold tracking-wide">ACTION REQUIRED</Badge>
-                )
-              ) : (
-                <span className="text-sm text-muted-foreground">No Slip</span>
-              )}
             </div>
+            <Button
+              asChild
+              className="w-full bg-emerald-500 hover:bg-emerald-600 text-white"
+            >
+              <Link to="/student/messages">Read Messages</Link>
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4 text-center py-2">
+            <div className="liquid-glass-pill rounded-2xl p-5 flex flex-col items-center justify-center">
+              <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mb-2">
+                <MessageSquare className="w-6 h-6 text-primary/70" />
+              </div>
+              <p className="text-sm font-medium text-muted-foreground">
+                All caught up! No new messages.
+              </p>
+            </div>
+            <Button variant="outline" asChild className="w-full">
+              <Link to="/student/messages">Send a message</Link>
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
 
-            {pendingPayment && pendingPayment.status !== 'paid' && (
-               <Button asChild variant="destructive" className="w-full mt-2 font-bold shadow-md hover:bg-red-700 hover:shadow-lg transition-all active:scale-[0.98]">
-                 <Link to="/student/payments">Go to Payments</Link>
-               </Button>
-            )}
-          </CardContent>
-        </Card>
+  // 4. BILLING STATUS CARD (Only turns red on/after the 5th or paymentDueDay; moves to #1 when red)
+  const BillingCard = (
+    <Card
+      key="billing-card"
+      className={`flex flex-col transition-all duration-300 ${
+        pendingPayment
+          ? pendingPayment.status === "paid"
+            ? "border-emerald-500/45 bg-emerald-500/[0.07] dark:bg-emerald-950/20"
+            : isPaymentRed
+              ? "border-rose-500/50 bg-rose-500/[0.08] dark:bg-rose-950/25 ring-2 ring-rose-500/20"
+              : "border-amber-400/40 bg-amber-500/[0.05] dark:bg-amber-950/15"
+          : ""
+      }`}
+    >
+      <CardHeader className="pb-3">
+        <CardTitle
+          className={`flex items-center gap-3 text-lg ${
+            pendingPayment
+              ? pendingPayment.status === "paid"
+                ? "text-emerald-700 dark:text-emerald-400 font-bold"
+                : isPaymentRed
+                  ? "text-rose-700 dark:text-rose-400 font-bold"
+                  : "text-foreground font-bold"
+              : ""
+          }`}
+        >
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-400/20 to-teal-600/20 border border-emerald-400/30 flex items-center justify-center text-base shadow-sm">
+            💳
+          </div>
+          <span>Billing Status</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex-1 flex flex-col justify-between gap-4">
+        <div className="liquid-glass-pill rounded-2xl p-4 flex items-center justify-between">
+          <div>
+            <p
+              className={`text-sm font-semibold ${
+                pendingPayment
+                  ? pendingPayment.status === "paid"
+                    ? "text-emerald-900 dark:text-emerald-200"
+                    : isPaymentRed
+                      ? "text-rose-900 dark:text-rose-200"
+                      : "text-foreground"
+                  : "text-foreground"
+              }`}
+            >
+              Current month
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Due on the {formatOrdinalDay(paymentDueDay)} of each month
+            </p>
+          </div>
+
+          {pendingPayment ? (
+            pendingPayment.status === "paid" ? (
+              <Badge className="bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 px-3 py-1">
+                Paid
+              </Badge>
+            ) : isPaymentRed ? (
+              <Badge
+                variant="destructive"
+                className="animate-pulse px-3 py-1 font-bold tracking-wide"
+              >
+                ACTION REQUIRED
+              </Badge>
+            ) : (
+              <Badge className="bg-amber-500/20 text-amber-800 dark:text-amber-300 border-amber-500/30 px-3 py-1 font-semibold">
+                Due on the {formatOrdinalDay(paymentDueDay)}
+              </Badge>
+            )
+          ) : (
+            <span className="text-xs font-medium text-muted-foreground px-3 py-1 rounded-full liquid-glass-pill">
+              No Slip
+            </span>
+          )}
+        </div>
+
+        {pendingPayment && pendingPayment.status !== "paid" ? (
+          <Button
+            asChild
+            variant={isPaymentRed ? "destructive" : "outline"}
+            className="w-full font-bold"
+          >
+            <Link to="/student/payments">Go to Payments</Link>
+          </Button>
+        ) : (
+          <Button asChild variant="outline" className="w-full">
+            <Link to="/student/payments">View Payment History</Link>
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  )
+
+  const CompactRankingCard = (
+    <CompactNativeQuestRankCard key="compact-ranking-card" showPlayButton={true} />
+  )
+
+  // Dynamically order cards:
+  // If payment is pending AND on/after the 5th (red), BillingCard becomes the 1st box!
+  // Otherwise: 1) CompactRankingCard, 2) ScheduleCard, 3) MessagesCard, 4) BillingCard.
+  const orderedBentoCards = isPaymentRed
+    ? [BillingCard, CompactRankingCard, ScheduleCard, MessagesCard]
+    : [CompactRankingCard, ScheduleCard, MessagesCard, BillingCard]
+
+  return (
+    <div className="space-y-6 pb-8">
+      {/* Top Bar: Notification Incentive + Compact Announcements Pill */}
+      <div className="space-y-3">
+        <NotificationIncentiveBanner />
+
+        {/* SMART ANNOUNCEMENT BANNER:
+            Shows automatically at the top when an announcement exists and hasn't been dismissed.
+            If dismissed (or no new announcement), collapses into a tiny pill so it never wastes a Bento box! */}
+        {latestAnnouncement && !announcementDismissed ? (
+          <div
+            className={`liquid-glass-card rounded-3xl p-4 sm:p-5 border transition-all animate-fade-in ${
+              isAnnouncementNew
+                ? "border-emerald-500/50 bg-emerald-500/[0.08] dark:bg-emerald-950/30 ring-2 ring-emerald-500/20"
+                : "border-amber-400/40 bg-amber-500/[0.05]"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-400/25 to-orange-500/25 border border-amber-400/40 flex items-center justify-center text-amber-600 dark:text-amber-300 shrink-0 shadow-sm mt-0.5">
+                  <Megaphone className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                      School Announcement
+                    </span>
+                    {isAnnouncementNew && (
+                      <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white font-extrabold text-[10px] uppercase px-2 py-0">
+                        New
+                      </Badge>
+                    )}
+                    {latestAnnouncement.date && (
+                      <span className="text-[11px] text-muted-foreground">
+                        • {format(parseISO(latestAnnouncement.date), "MMM d, yyyy")}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="font-extrabold text-base text-foreground">
+                    {latestAnnouncement.title}
+                  </h3>
+                  <p className="text-xs sm:text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                    {latestAnnouncement.message}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Link
+                  to="/student/announcements"
+                  className="text-xs font-semibold px-3 py-1.5 rounded-full liquid-glass-pill text-primary hover:underline hidden sm:inline-flex items-center gap-1"
+                >
+                  <span>All</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleDismissAnnouncement}
+                  className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
+                  title="Dismiss announcement"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex justify-end">
+            <div className="inline-flex items-center gap-2">
+              {latestAnnouncement && announcementDismissed && (
+                <button
+                  type="button"
+                  onClick={() => setAnnouncementDismissed(false)}
+                  className="text-xs font-semibold px-3.5 py-1.5 rounded-full liquid-glass-pill text-foreground/80 hover:text-primary inline-flex items-center gap-1.5 transition-colors"
+                >
+                  <Megaphone className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Show latest announcement</span>
+                </button>
+              )}
+              <Link
+                to="/student/announcements"
+                className="text-xs font-semibold px-3.5 py-1.5 rounded-full liquid-glass-pill text-muted-foreground hover:text-primary inline-flex items-center gap-1.5 transition-colors"
+              >
+                <Megaphone className="w-3.5 h-3.5 text-primary" />
+                <span>Announcements</span>
+              </Link>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* APPLE LIQUID GLASS 4-CARD BENTO GRID */}
+      <div className="grid grid-cols-1 md:grid-cols-2 items-start gap-6">
+        {orderedBentoCards}
       </div>
     </div>
   )

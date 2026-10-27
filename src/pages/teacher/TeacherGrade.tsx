@@ -36,6 +36,7 @@ const TeacherGrade: React.FC = () => {
   const [classLevel, setClassLevel] = useState<string>('')
   const [classGrade, setClassGrade] = useState<string>('');
   const [speakingGrade, setSpeakingGrade] = useState<string>('');
+  const [listeningGrade, setListeningGrade] = useState<string>('');
   const [grammarGrade, setGrammarGrade] = useState<string>('');
   const [readingGrade, setReadingGrade] = useState<string>('');
   const [classChapter, setClassChapter] = useState<string>('');
@@ -142,6 +143,7 @@ const TeacherGrade: React.FC = () => {
         const data = JSON.parse(draft);
         setClassGrade(data.classGrade || '');
         setSpeakingGrade(data.speakingGrade || '');
+        setListeningGrade(data.listeningGrade || '');
         setGrammarGrade(data.grammarGrade || '');
         setReadingGrade(data.readingGrade || '');
         setClassChapter(data.classChapter || '');
@@ -154,10 +156,11 @@ const TeacherGrade: React.FC = () => {
   }, [selectedClass]);
 
   const loadClassData = (cls: Class) => {
-    setClassGrade(cls.class_grade?.toString() || '');
-    setSpeakingGrade(cls.speaking_grade?.toString() || '');
-    setGrammarGrade(cls.grammar_grade?.toString() || '');
-    setReadingGrade(cls.reading_grade?.toString() || '');
+    setClassGrade(cls.class_grade !== undefined && cls.class_grade !== null ? cls.class_grade.toString() : '');
+    setSpeakingGrade(cls.speaking_grade !== undefined && cls.speaking_grade !== null ? cls.speaking_grade.toString() : '');
+    setListeningGrade(cls.listening_grade !== undefined && cls.listening_grade !== null ? cls.listening_grade.toString() : '');
+    setGrammarGrade(cls.grammar_grade !== undefined && cls.grammar_grade !== null ? cls.grammar_grade.toString() : '');
+    setReadingGrade(cls.reading_grade !== undefined && cls.reading_grade !== null ? cls.reading_grade.toString() : '');
     setClassChapter(cls.class_chapter || '');
     setClassType(cls.class_type || '');
     setClassLevel(cls.class_level || '');
@@ -180,6 +183,7 @@ const TeacherGrade: React.FC = () => {
       const draft = {
         classGrade,
         speakingGrade,
+        listeningGrade,
         grammarGrade,
         readingGrade,
         classChapter,
@@ -193,29 +197,47 @@ const TeacherGrade: React.FC = () => {
     }
   };
 
+  const parseGrade = (val: string) => {
+    if (!val || val.trim() === '') return null;
+    const num = parseFloat(val.replace(',', '.'));
+    return isNaN(num) ? null : num;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedClass?.id) return;
 
     setSaving(true);
     try {
-      const { data, error } = await supabase
+      const payload: any = {
+        class_grade: parseGrade(classGrade),
+        speaking_grade: parseGrade(speakingGrade),
+        listening_grade: parseGrade(listeningGrade),
+        grammar_grade: parseGrade(grammarGrade),
+        reading_grade: parseGrade(readingGrade),
+        class_chapter: noChapter ? null : classChapter || null,
+        class_type: isAbsent ? null : classType || null,
+        class_level: isAbsent ? null : classLevel || null,
+        is_absent: isAbsent,
+        notes: notes || null,
+      };
+
+      let { data, error } = await supabase
         .from('classes')
-        .update({
-          class_grade: classGrade ? parseInt(classGrade) : null,
-          speaking_grade: speakingGrade ? parseInt(speakingGrade) : null,
-          grammar_grade: grammarGrade ? parseInt(grammarGrade) : null,
-          reading_grade: readingGrade ? parseInt(readingGrade) : null,
-          class_chapter: noChapter ? null : classChapter || null,
-          class_type: isAbsent ? null : classType || null,
-          class_level: isAbsent ? null : classLevel || null,
-          is_absent: isAbsent,
-          notes: notes || null,
-        })
+        .update(payload)
         .eq('id', selectedClass.id)
         .select('*');
 
-      if (error) {
+      if (error && (error.code === '42703' || error.message?.includes('listening_grade'))) {
+        delete payload.listening_grade;
+        const retry = await supabase
+          .from('classes')
+          .update(payload)
+          .eq('id', selectedClass.id)
+          .select('*');
+        if (retry.error) throw retry.error;
+        data = retry.data;
+      } else if (error) {
         console.error("Supabase Error:", error);
         throw error;
       }
@@ -299,56 +321,73 @@ const TeacherGrade: React.FC = () => {
               {/* Grades Grid - Hide if absent */}
               {!isAbsent && (
                 <>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="space-y-2">
-                  <Label htmlFor="classGrade">Class Grade (0-10)</Label>
-                  <Input
-                    id="classGrade"
-                    type="number"
-                    min="0"
-                    max="10"
-                    value={classGrade}
-                    onChange={(e) => setClassGrade(e.target.value)}
-                    onWheel={(e) => e.currentTarget.blur()}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="speakingGrade">Speaking (0-10)</Label>
-                  <Input
-                    id="speakingGrade"
-                    type="number"
-                    min="0"
-                    max="10"
-                    value={speakingGrade}
-                    onChange={(e) => setSpeakingGrade(e.target.value)}
-                    onWheel={(e) => e.currentTarget.blur()}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="grammarGrade">Grammar (0-10)</Label>
-                  <Input
-                    id="grammarGrade"
-                    type="number"
-                    min="0"
-                    max="10"
-                    value={grammarGrade}
-                    onChange={(e) => setGrammarGrade(e.target.value)}
-                    onWheel={(e) => e.currentTarget.blur()}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="readingGrade">Reading (0-10)</Label>
-                  <Input
-                    id="readingGrade"
-                    type="number"
-                    min="0"
-                    max="10"
-                    value={readingGrade}
-                    onChange={(e) => setReadingGrade(e.target.value)}
-                    onWheel={(e) => e.currentTarget.blur()}
-                  />
-                </div>
-              </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="classGrade" className="text-xs font-semibold">Class Grade (0-10)</Label>
+                       <Input
+                         id="classGrade"
+                         type="number"
+                         min="0"
+                         max="10"
+                         step="0.5"
+                         value={classGrade}
+                         onChange={(e) => setClassGrade(e.target.value)}
+                         onWheel={(e) => e.currentTarget.blur()}
+                       />
+                     </div>
+                     <div className="space-y-1.5">
+                       <Label htmlFor="speakingGrade" className="text-xs font-semibold">Speaking (0-10)</Label>
+                       <Input
+                         id="speakingGrade"
+                         type="number"
+                         min="0"
+                         max="10"
+                         step="0.5"
+                         value={speakingGrade}
+                         onChange={(e) => setSpeakingGrade(e.target.value)}
+                         onWheel={(e) => e.currentTarget.blur()}
+                       />
+                     </div>
+                     <div className="space-y-1.5">
+                       <Label htmlFor="listeningGrade" className="text-xs font-semibold">Listening (0-10)</Label>
+                       <Input
+                         id="listeningGrade"
+                         type="number"
+                         min="0"
+                         max="10"
+                         step="0.5"
+                         value={listeningGrade}
+                         onChange={(e) => setListeningGrade(e.target.value)}
+                         onWheel={(e) => e.currentTarget.blur()}
+                       />
+                     </div>
+                     <div className="space-y-1.5">
+                       <Label htmlFor="grammarGrade" className="text-xs font-semibold">Grammar (0-10)</Label>
+                       <Input
+                         id="grammarGrade"
+                         type="number"
+                         min="0"
+                         max="10"
+                         step="0.5"
+                         value={grammarGrade}
+                         onChange={(e) => setGrammarGrade(e.target.value)}
+                         onWheel={(e) => e.currentTarget.blur()}
+                       />
+                     </div>
+                     <div className="space-y-1.5">
+                       <Label htmlFor="readingGrade" className="text-xs font-semibold">Reading (0-10)</Label>
+                       <Input
+                         id="readingGrade"
+                         type="number"
+                         min="0"
+                         max="10"
+                         step="0.5"
+                         value={readingGrade}
+                         onChange={(e) => setReadingGrade(e.target.value)}
+                         onWheel={(e) => e.currentTarget.blur()}
+                       />
+                     </div>
+                   </div>
 
               {/* Class Type */}
               <div className="space-y-2">

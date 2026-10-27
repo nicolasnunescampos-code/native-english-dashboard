@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { supabase, Video } from '@/lib/supabase';
+import { supabase, Video, isVideoCourseItem } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Trash2, Plus, Pencil, ExternalLink, Upload } from 'lucide-react';
 import {
@@ -73,7 +73,7 @@ const AdminVideos: React.FC = () => {
                 .order('id', { ascending: false });
 
             if (error) throw error;
-            setVideos(data || []);
+            setVideos((data || []).filter(v => !isVideoCourseItem(v)));
         } catch (error) {
             console.error('Error fetching videos:', error);
         } finally {
@@ -197,7 +197,7 @@ const AdminVideos: React.FC = () => {
         <div className="space-y-6 animate-fade-in">
             <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold flex items-center gap-2">
-                    🎥 Manage Videos
+                    🎥 Manage Live Classes Videos
                 </h2>
 
                 <Dialog open={isDialogOpen} onOpenChange={handleOpenChange}>

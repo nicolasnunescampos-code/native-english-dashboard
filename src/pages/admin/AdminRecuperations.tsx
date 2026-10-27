@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -19,7 +20,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { Pencil, Trash2, CheckCircle, ArrowLeft, RotateCcw } from "lucide-react"
+import { Pencil, Trash2, CheckCircle, ArrowLeft, RotateCcw, CalendarPlus } from "lucide-react"
+import { syncRecuperationsStatus } from "@/utils/recuperationSync"
 
 interface Recuperation {
   id: string
@@ -37,6 +39,7 @@ interface Student {
 
 const AdminRecuperations: React.FC = () => {
   const { toast } = useToast()
+  const navigate = useNavigate()
 
   const [recuperations, setRecuperations] = useState<Recuperation[]>([])
   const [students, setStudents] = useState<Student[]>([])
@@ -57,6 +60,9 @@ const AdminRecuperations: React.FC = () => {
 
   const loadData = async () => {
     try {
+      // Auto-resolve any past classes / sessions
+      await syncRecuperationsStatus()
+
       const { data: stds, error: stdError } = await supabase
         .from('students')
         .select('id, student_name')
@@ -295,16 +301,27 @@ const AdminRecuperations: React.FC = () => {
                     </div>
 
                     {r.status === 'pending' && (
-                      <Button 
-                        variant="secondary" 
-                        size="sm" 
-                        className="w-full mt-2 bg-green-50 text-green-700 hover:bg-green-100"
-                        onClick={(e) => handleMarkCompleted(r.id, e)}
-                        disabled={loading}
-                      >
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Mark Completed
-                      </Button>
+                      <div className="flex flex-col gap-2 mt-2">
+                        <Button 
+                          variant="default" 
+                          size="sm" 
+                          className="w-full bg-amber-500 hover:bg-amber-600 text-white font-medium text-xs h-8 flex items-center justify-center gap-1.5 shadow-sm"
+                          onClick={() => navigate('/admin/calendar')}
+                        >
+                          <CalendarPlus className="w-3.5 h-3.5" />
+                          Schedule on Calendar
+                        </Button>
+                        <Button 
+                          variant="secondary" 
+                          size="sm" 
+                          className="w-full bg-green-50 text-green-700 hover:bg-green-100 text-xs h-8"
+                          onClick={(e) => handleMarkCompleted(r.id, e)}
+                          disabled={loading}
+                        >
+                          <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
+                          Mark Completed
+                        </Button>
+                      </div>
                     )}
 
                     <div className="flex gap-2 pt-2">

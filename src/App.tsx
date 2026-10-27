@@ -14,14 +14,17 @@ import StudentPayments from "./pages/student/StudentPayments";
 import StudentMaterials from "./pages/student/StudentMaterials";
 import StudentAnnouncements from "./pages/student/StudentAnnouncements";
 import StudentVideos from "./pages/student/StudentVideos";
+import StudentVideoCourse from "./pages/student/StudentVideoCourse";
 import StudentAudios from "./pages/student/StudentAudios";
 import StudentRules from "./pages/student/StudentRules";
 import StudentProfile from "./pages/student/StudentProfile";
-import StudentReports from "./pages/student/StudentReports";
 import StudentRecuperations from "./pages/student/StudentRecuperations";
 import StudentExams from "./pages/student/StudentExams";
 import ExamRoom from "./pages/student/ExamRoom";
 import StudentBuddy from "./pages/student/StudentBuddy";
+import StudentSpeakingLab from "./pages/student/StudentSpeakingLab";
+import StudentGrammarRush from "./pages/student/StudentGrammarRush";
+import TeacherSpeakingTracker from "./pages/teacher/TeacherSpeakingTracker";
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import TeacherSchedule from "./pages/teacher/TeacherSchedule";
 import TeacherGrade from "./pages/teacher/TeacherGrade";
@@ -39,16 +42,22 @@ import AdminAnnouncements from "./pages/admin/AdminAnnouncements";
 import AdminClasses from "./pages/admin/AdminClasses";
 import AdminRecuperations from "./pages/admin/AdminRecuperations";
 import AdminVideos from "./pages/admin/AdminVideos";
+import AdminVideoCourse from "./pages/admin/AdminVideoCourse";
 import AdminRules from "./pages/admin/AdminRules";
 import AdminAudios from "./pages/admin/AdminAudios";
 import AdminProgress from "./pages/admin/AdminProgress";
 import AdminMainDashboard from "./pages/admin/AdminMainDashboard";
 import AdminTeacherPayments from "./pages/admin/AdminTeacherPayments";
-import AdminReports from "./pages/admin/AdminReports";
 import AdminMaterials from "./pages/admin/AdminMaterials";
 import AdminExams from "./pages/admin/AdminExams";
 import AdminWorksheets from "./pages/admin/AdminWorksheets";
 import AdminCalendar from "./pages/admin/AdminCalendar";
+import AdminProfile from '@/pages/admin/AdminProfile';
+import AdminConfirmations from '@/pages/admin/AdminConfirmations';
+import AdminFeedback from "./pages/admin/AdminFeedback";
+import AdminExpenses from "./pages/admin/AdminExpenses";
+import GrammarRushQuestionBank from "./pages/admin/GrammarRushQuestionBank";
+import AdminPracticeTracker from "./pages/admin/AdminPracticeTracker";
 import NotFound from "./pages/NotFound";
 import Messages from "./pages/Messages";
 
@@ -132,24 +141,29 @@ const AppRoutes = () => {
       <Route path="/student/payments" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentPayments /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/materials" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentMaterials /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/announcements" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentAnnouncements /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/student/videos" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout hideHeader={true}><StudentVideos /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/student/videos" element={<Navigate to="/student/video-course" replace />} />
+      <Route path="/student/video-course" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout hideHeader={true} hideSidebar={true}><StudentVideoCourse /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/audios" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout hideHeader={true}><StudentAudios /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/messages" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout hideHeader={true}><Messages /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/rules" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentRules /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/profile" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentProfile /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/student/reports" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentReports /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/recuperations" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentRecuperations /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/exams" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentExams /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/exams/:id" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout hideHeader={true}><ExamRoom /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/buddy" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentBuddy /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/student/speaking" element={<Navigate to="/student/grammar-rush" replace />} />
+      <Route path="/student/grammar-rush" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentGrammarRush /></DashboardLayout></ProtectedRoute>} />
 
       {/* Teacher Routes */}
       <Route path="/teacher" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout><TeacherDashboard /></DashboardLayout></ProtectedRoute>} />
       <Route path="/teacher/schedule" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout><TeacherSchedule /></DashboardLayout></ProtectedRoute>} />
       <Route path="/teacher/grade" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout><TeacherGrade /></DashboardLayout></ProtectedRoute>} />
       <Route path="/teacher/students" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout><TeacherStudents /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/teacher/speaking" element={<Navigate to="/teacher/grammar-rush-tracking" replace />} />
+      <Route path="/teacher/grammar-rush-tracking" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout><AdminPracticeTracker /></DashboardLayout></ProtectedRoute>} />
       <Route path="/teacher/materials" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout><TeacherMaterials /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/teacher/videos" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout hideHeader={true}><StudentVideos /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/teacher/videos" element={<Navigate to="/teacher/video-course" replace />} />
+      <Route path="/teacher/video-course" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout hideHeader={true} hideSidebar={true}><StudentVideoCourse /></DashboardLayout></ProtectedRoute>} />
       <Route path="/teacher/audios" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout hideHeader={true}><StudentAudios /></DashboardLayout></ProtectedRoute>} />
       <Route path="/teacher/messages" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout hideHeader={true}><Messages /></DashboardLayout></ProtectedRoute>} />
       <Route path="/teacher/rules" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout><TeacherRules /></DashboardLayout></ProtectedRoute>} />
@@ -157,9 +171,10 @@ const AppRoutes = () => {
 
       {/* Admin Routes */}
       <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminMainDashboard /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/confirmations" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminConfirmations /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/payments" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminPayments /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/teacher-payments" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminTeacherPayments /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/admin/classes" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminClasses /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/classes" element={<Navigate to="/admin/calendar" replace />} />
       <Route path="/admin/recuperations" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminRecuperations /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/students" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminStudents /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/student-history" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><TeacherStudents /></DashboardLayout></ProtectedRoute>} />
@@ -171,13 +186,18 @@ const AppRoutes = () => {
       <Route path="/admin/materials" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminMaterials /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/worksheets" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminWorksheets /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/exams" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminExams /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/admin/videos" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminVideos /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/grammar-rush-questions" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><GrammarRushQuestionBank /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/videos" element={<Navigate to="/admin/video-course" replace />} />
+      <Route path="/admin/video-course" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminVideoCourse /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/messages" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout hideHeader={true}><Messages /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/rules" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminRules /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/calendar" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminCalendar /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/audios" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminAudios /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/speaking" element={<Navigate to="/admin/grammar-rush-tracking" replace />} />
+      <Route path="/admin/grammar-rush-tracking" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminPracticeTracker /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/progress" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminProgress /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/admin/reports" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminReports /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/feedback" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminFeedback /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/expenses" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout><AdminExpenses /></DashboardLayout></ProtectedRoute>} />
 
       <Route path="*" element={<NotFound />} />
     </Routes>

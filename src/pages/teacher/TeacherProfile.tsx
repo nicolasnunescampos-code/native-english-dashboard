@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/contexts/AuthContext"
 import { Card, CardContent } from "@/components/ui/card"
+import { BellRing } from "lucide-react"
+import { NotificationIncentiveBanner } from "@/components/notifications/NotificationIncentiveBanner"
 
 interface TeacherProfileData {
     id: string
@@ -116,6 +118,22 @@ const TeacherProfile: React.FC = () => {
                             </div>
                         )}
                     </div>
+                </CardContent>
+            </Card>
+
+            {/* Notification Preferences */}
+            <Card>
+                <CardContent className="p-6 md:p-8 space-y-4">
+                    <div>
+                        <h3 className="text-lg font-semibold flex items-center gap-2">
+                            <BellRing className="w-5 h-5 text-primary" />
+                            Notificações no Celular & Computador
+                        </h3>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            Receba alertas sonoros quando alunos enviarem mensagens ou novas aulas entrarem na sua grade.
+                        </p>
+                    </div>
+                    <NotificationIncentiveBanner />
                 </CardContent>
             </Card>
         </div>

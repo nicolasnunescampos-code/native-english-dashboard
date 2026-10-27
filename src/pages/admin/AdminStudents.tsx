@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 import { supabase } from "@/lib/supabase"
 import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
   DialogContent,
@@ -19,7 +21,19 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { Pencil, Trash2, History } from "lucide-react"
+import { Pencil, Trash2, History, Trophy, Medal, Zap, GraduationCap, Clock } from "lucide-react"
+import { format, parseISO } from "date-fns"
+
+interface StudentProgressSummary {
+  classes_completed: number
+  nq_sessions: number
+  nq_best_score: number
+  nq_avg_accuracy: number
+  nq_chapters_count: number
+  speaking_attempts: number
+  speaking_avg_score: number
+  nq_last_accessed?: string | null
+}
 
 interface Student {
   id: string
@@ -34,12 +48,15 @@ interface Student {
   status?: 'active' | 'stopped'
   payment_due_day?: number
   course_type?: 'Native English' | 'Conversation Club'
+  source?: string | null
+  referred_by?: string | null
 }
 
 const AdminStudents: React.FC = () => {
   const { toast } = useToast()
 
   const [students, setStudents] = useState<Student[]>([])
+  const [progressByStudent, setProgressByStudent] = useState<Record<string, StudentProgressSummary>>({})
   const [openCreate, setOpenCreate] = useState(false)
   const [openEdit, setOpenEdit] = useState(false)
   const [openDelete, setOpenDelete] = useState(false)
@@ -60,6 +77,8 @@ const AdminStudents: React.FC = () => {
     status: string
     payment_due_day: number
     course_type: 'Native English' | 'Conversation Club'
+    source: string
+    referred_by: string
   }>({
     email: "",
     password: "",
@@ -72,27 +91,94 @@ const AdminStudents: React.FC = () => {
     status: "active",
     payment_due_day: 5,
     course_type: "Native English",
+    source: "",
+    referred_by: "none",
   })
 
   // =========================
-  // FETCH STUDENTS
+  // FETCH STUDENTS & NATIVE QUEST PROGRESS
   // =========================
   const fetchStudents = async () => {
-    const { data, error } = await supabase
-      .from("students")
-      .select("*")
-      .order("student_name")
+    const [studentsRes, classesRes, nqRes, speakRes] = await Promise.all([
+      supabase.from("students").select("*").order("student_name"),
+      supabase
+        .from("classes")
+        .select("student_name, class_grade, speaking_grade, grammar_grade, reading_grade, listening_grade, is_absent")
+        .or("speaking_grade.not.is.null,class_grade.not.is.null,grammar_grade.not.is.null,reading_grade.not.is.null,listening_grade.not.is.null"),
+      supabase
+        .from("grammar_game_sessions")
+        .select("student_id, student_name, book, chapter, score, accuracy"),
+      supabase
+        .from("student_speaking_attempts")
+        .select("student_id, student_name, score"),
+    ])
 
-    if (error) {
+    if (studentsRes.error) {
       toast({
         title: "Error",
-        description: error.message,
+        description: studentsRes.error.message,
         variant: "destructive",
       })
       return
     }
 
-    setStudents(data || [])
+    const loadedStudents: Student[] = studentsRes.data || []
+    setStudents(loadedStudents)
+
+    const allClasses = classesRes.data || []
+    const allNq = nqRes.data || []
+    const allSpeak = speakRes.data || []
+
+    const map: Record<string, StudentProgressSummary> = {}
+    loadedStudents.forEach((stu) => {
+      const nameLower = String(stu.student_name || "").trim().toLowerCase()
+      const stuClasses = allClasses.filter(
+        (c: any) =>
+          !c.is_absent &&
+          String(c.student_name || "").trim().toLowerCase() === nameLower
+      )
+      const stuNq = allNq.filter(
+        (s: any) =>
+          (stu.id && s.student_id === stu.id) ||
+          String(s.student_name || "").trim().toLowerCase() === nameLower
+      )
+      const stuSpeak = allSpeak.filter(
+        (a: any) =>
+          (stu.id && a.student_id === stu.id) ||
+          String(a.student_name || "").trim().toLowerCase() === nameLower
+      )
+
+      const nqSessions = stuNq.length
+      const nqBestScore =
+        nqSessions > 0 ? Math.max(...stuNq.map((s: any) => Number(s.score || 0))) : 0
+      const nqAvgAccuracy =
+        nqSessions > 0
+          ? Math.round(
+              stuNq.reduce((sum: number, s: any) => sum + Number(s.accuracy || 0), 0) /
+                nqSessions
+            )
+          : 0
+      const nqChaptersCount = new Set(stuNq.map((s: any) => `${s.book}_${s.chapter}`)).size
+      const speakingAvgScore =
+        stuSpeak.length > 0
+          ? Math.round(
+              stuSpeak.reduce((sum: number, a: any) => sum + Number(a.score || 0), 0) /
+                stuSpeak.length
+            )
+          : 0
+
+      map[stu.id] = {
+        classes_completed: stuClasses.length,
+        nq_sessions: nqSessions,
+        nq_best_score: nqBestScore,
+        nq_avg_accuracy: nqAvgAccuracy,
+        nq_chapters_count: nqChaptersCount,
+        speaking_attempts: stuSpeak.length,
+        speaking_avg_score: speakingAvgScore,
+        nq_last_accessed: stuNq.length > 0 ? (stuNq[0].created_at || null) : null,
+      }
+    })
+    setProgressByStudent(map)
   }
 
   useEffect(() => {
@@ -115,6 +201,8 @@ const AdminStudents: React.FC = () => {
       status: "active",
       payment_due_day: 5,
       course_type: "Native English",
+      source: "",
+      referred_by: "none",
     })
   }
 
@@ -222,6 +310,8 @@ const AdminStudents: React.FC = () => {
           preferred_schedule: form.preferred_schedule || null,
           payment_due_day: form.payment_due_day,
           course_type: form.course_type,
+          source: form.source || null,
+          referred_by: form.source === 'referral' && form.referred_by !== 'none' ? form.referred_by : null,
         }).eq('id', newStudent.id)
 
         // 3. Patch the initial payment to give it a proper due_date and currency
@@ -274,6 +364,8 @@ const AdminStudents: React.FC = () => {
       status: student.status || "active",
       payment_due_day: student.payment_due_day || 5,
       course_type: student.course_type || "Native English",
+      source: student.source || "",
+      referred_by: student.referred_by || "none",
     })
     setOpenEdit(true)
   }
@@ -295,12 +387,31 @@ const AdminStudents: React.FC = () => {
           status: form.status,
           payment_due_day: form.payment_due_day,
           course_type: form.course_type,
+          source: form.source || null,
+          referred_by: form.source === 'referral' && form.referred_by !== 'none' ? form.referred_by : null,
           ...(form.status === 'stopped' && selectedStudent.status !== 'stopped' ? { stopped_at: new Date().toISOString() } : {}),
           ...(form.status === 'active' && selectedStudent.status === 'stopped' ? { stopped_at: null } : {})
         })
         .eq('id', selectedStudent.id)
 
       if (error) throw error
+
+      if (form.password && form.password.trim() !== "") {
+        const { error: pwdError } = await supabase.functions.invoke("update-user-password", {
+          body: {
+            userId: selectedStudent.id,
+            newPassword: form.password
+          }
+        })
+        if (pwdError) {
+          console.error("Failed to update password:", pwdError)
+          toast({
+            title: "Warning",
+            description: "Student details updated, but password change failed.",
+            variant: "destructive"
+          })
+        }
+      }
 
       // Update associated pending payments
       const paymentUpdate: any = {}
@@ -433,10 +544,12 @@ const AdminStudents: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-xl font-semibold">Manage Students</h2>
-          <p className="text-sm text-muted-foreground mt-1">Add, edit, or remove students from your system.</p>
+          <h2 className="text-xl font-semibold">Manage Students &amp; Progress Cards</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Add, edit, or inspect each student&apos;s 360° card, course history, and Native Quest game progress.
+          </p>
         </div>
-        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
           <Input
             placeholder="Search students..."
             value={searchQuery}
@@ -452,6 +565,12 @@ const AdminStudents: React.FC = () => {
             />
             Show Stopped Only
           </label>
+          <Button asChild variant="outline" className="whitespace-nowrap border-amber-500/40 text-amber-600 dark:text-amber-300 hover:bg-amber-500/10">
+            <Link to="/admin/student-history">
+              <Trophy className="w-4 h-4 mr-1.5 text-amber-500" />
+              360° Directory &amp; Ranking
+            </Link>
+          </Button>
           <Button variant="outline" onClick={fixClasses} disabled={loading} className="whitespace-nowrap">
             Fix Schedule Data
           </Button>
@@ -466,71 +585,153 @@ const AdminStudents: React.FC = () => {
             No students found.
           </div>
         ) : (
-          displayStudents.map((student) => (
-            <Card key={student.id} className={student.status === 'stopped' ? 'opacity-70 grayscale-[0.3]' : ''}>
-            <CardContent className="p-6 space-y-3">
-              <div>
-                <h3 className="font-semibold text-lg">{student.student_name}</h3>
-                <p className="text-sm text-muted-foreground">{student.email}</p>
-                <div className="mt-2 flex gap-2">
-                  <span className={`text-xs font-semibold px-2 py-1 rounded-full ${student.rules_agreed ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                    {student.rules_agreed ? 'Rules: Agreed ✅' : 'Rules: Pending ⏳'}
-                  </span>
-                  {student.status === 'stopped' && (
-                    <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-700">
-                      Stopped 🛑
-                    </span>
-                  )}
-                </div>
-              </div>
+          displayStudents.map((student) => {
+            const prog = progressByStudent[student.id] || {
+              classes_completed: 0,
+              nq_sessions: 0,
+              nq_best_score: 0,
+              nq_avg_accuracy: 0,
+              nq_chapters_count: 0,
+              speaking_attempts: 0,
+              speaking_avg_score: 0,
+            }
+            const coursePct = Math.min(100, Math.round((prog.classes_completed / 160) * 100))
+            const nqPct = Math.min(100, Math.round((prog.nq_chapters_count / 30) * 100))
 
-              <div className="text-sm space-y-1">
-                <p>📚 {student.classes_per_week} classes/week</p>
-                <p>🎓 Course: {student.course_type || 'Native English'}</p>
-                {student.cpf && <p>🆔 CPF: {student.cpf}</p>}
-                {student.preferred_schedule && <p>🕒 Shift/Time: {student.preferred_schedule}</p>}
-                {student.payment_amount && (
-                  <p className="font-medium text-green-700">
-                    💳 {student.currency || 'BRL'} {student.payment_amount}
-                  </p>
-                )}
-              </div>
+            return (
+              <Card key={student.id} className={student.status === 'stopped' ? 'opacity-70 grayscale-[0.3]' : ''}>
+                <CardContent className="p-6 space-y-3.5">
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="font-semibold text-lg">{student.student_name}</h3>
+                        <p className="text-sm text-muted-foreground">{student.email}</p>
+                      </div>
+                      <Badge variant="outline" className="text-[11px] shrink-0">
+                        {prog.classes_completed}/160 classes ({coursePct}%)
+                      </Badge>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <span className={`text-xs font-semibold px-2 py-1 rounded-full ${student.rules_agreed ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                        {student.rules_agreed ? 'Rules: Agreed ✅' : 'Rules: Pending ⏳'}
+                      </span>
+                      {student.status === 'stopped' && (
+                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-700">
+                          Stopped 🛑
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-              <div className="flex gap-2 pt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => handleEditClick(student)}
-                >
-                  <Pencil className="w-4 h-4 mr-2" />
-                  Edit
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => window.open(`/admin/student-history?student=${encodeURIComponent(student.student_name)}`, '_blank')}
-                >
-                  <History className="w-4 h-4 mr-2" />
-                  History
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => {
-                    setSelectedStudent(student)
-                    setOpenDelete(true)
-                  }}
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Delete
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )))}
+                  <div className="text-sm space-y-1">
+                    <p>📚 {student.classes_per_week} classes/week</p>
+                    <p>🎓 Course: {student.course_type || 'Native English'}</p>
+                    {student.cpf && <p>🆔 CPF: {student.cpf}</p>}
+                    {student.preferred_schedule && <p>🕒 Shift/Time: {student.preferred_schedule}</p>}
+                    {student.source && (
+                      <p>📢 Source: {student.source === 'referral' && student.referred_by ? `Referred by ${students.find(s => s.id === student.referred_by)?.student_name || 'Unknown'}` : student.source}</p>
+                    )}
+                    {student.payment_amount && (
+                      <p className="font-medium text-green-700">
+                        💳 {student.currency || 'BRL'} {student.payment_amount}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Native Quest Progress Section inside Admin Student Card */}
+                  <div className="rounded-xl bg-amber-500/[0.07] dark:bg-amber-500/10 border border-amber-500/25 p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-300 flex items-center gap-1">
+                        <Zap className="h-3.5 w-3.5 text-amber-500" />
+                        Native Quest Progress
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] py-0 bg-amber-500/15 text-amber-700 dark:text-amber-200 border-amber-500/30"
+                      >
+                        {prog.nq_chapters_count}/30 Chapters ({nqPct}%)
+                      </Badge>
+                    </div>
+                    <div className="w-full bg-slate-200/70 dark:bg-white/10 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-amber-400 to-orange-500 h-full rounded-full transition-all"
+                        style={{ width: `${nqPct}%` }}
+                      />
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5 pt-0.5 text-center">
+                      <div className="rounded-lg bg-background/60 p-1.5 border border-border/50">
+                        <p className="text-[10px] text-muted-foreground">Best Score</p>
+                        <p className="text-xs font-extrabold text-amber-600 dark:text-amber-300">
+                          {prog.nq_best_score.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-background/60 p-1.5 border border-border/50">
+                        <p className="text-[10px] text-muted-foreground">Quests</p>
+                        <p className="text-xs font-extrabold text-foreground">
+                          {prog.nq_sessions}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-background/60 p-1.5 border border-border/50">
+                        <p className="text-[10px] text-muted-foreground">Accuracy</p>
+                        <p className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400">
+                          {prog.nq_sessions ? `${prog.nq_avg_accuracy}%` : '—'}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-background/60 p-1.5 border border-border/50">
+                        <p className="text-[10px] text-muted-foreground">Speaking</p>
+                        <p className="text-xs font-extrabold text-purple-600 dark:text-purple-300">
+                          {prog.speaking_attempts ? `${prog.speaking_avg_score}%` : '—'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {prog.nq_last_accessed && (
+                      <div className="flex items-center justify-end gap-1.5 pt-1 text-[10px] text-muted-foreground font-semibold">
+                        <Clock className="w-3 h-3 text-sky-500 shrink-0" />
+                        <span>Last played: {format(parseISO(prog.nq_last_accessed), 'MMM d, HH:mm')}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => handleEditClick(student)}
+                    >
+                      <Pencil className="w-4 h-4 mr-1.5" />
+                      Edit
+                    </Button>
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 border-sky-500/40 text-sky-600 dark:text-sky-300 hover:bg-sky-500/10"
+                    >
+                      <Link to={`/admin/student-history?student=${encodeURIComponent(student.student_name)}`}>
+                        <GraduationCap className="w-4 h-4 mr-1.5" />
+                        360° Card
+                      </Link>
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => {
+                        setSelectedStudent(student)
+                        setOpenDelete(true)
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4 mr-1.5" />
+                      Delete
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })
+        )}
       </div>
 
       {/* CREATE STUDENT MODAL */}
@@ -540,7 +741,7 @@ const AdminStudents: React.FC = () => {
             <DialogTitle>Create New Student</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-[75vh] overflow-y-auto px-2 custom-scrollbar">
             <div>
               <Label>Email</Label>
               <Input
@@ -632,6 +833,45 @@ const AdminStudents: React.FC = () => {
               />
             </div>
 
+            <div>
+              <Label>Source (optional)</Label>
+              <Select
+                value={form.source}
+                onValueChange={(val) => setForm({ ...form, source: val })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="How did they hear about us?" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="referral">Referral (Indicated by student)</SelectItem>
+                  <SelectItem value="instagram">Instagram</SelectItem>
+                  <SelectItem value="website">Website</SelectItem>
+                  <SelectItem value="ads">Ads</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {form.source === 'referral' && (
+              <div className="p-3 bg-purple-50 border border-purple-100 rounded-lg">
+                <Label className="text-purple-800">Who referred them?</Label>
+                <Select
+                  value={form.referred_by}
+                  onValueChange={(val) => setForm({ ...form, referred_by: val })}
+                >
+                  <SelectTrigger className="bg-white mt-1">
+                    <SelectValue placeholder="Select a student..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Unknown / Not in list</SelectItem>
+                    {students.map(s => (
+                      <SelectItem key={s.id} value={s.id}>{s.student_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Payment amount</Label>
@@ -668,12 +908,22 @@ const AdminStudents: React.FC = () => {
             <DialogTitle>Edit Student</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-[75vh] overflow-y-auto px-2 custom-scrollbar">
             <div>
               <Label>Student Name</Label>
               <Input
                 value={form.student_name}
                 onChange={(e) => setForm({ ...form, student_name: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <Label>New Password (optional)</Label>
+              <Input
+                type="text"
+                placeholder="Leave blank to keep unchanged"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
               />
             </div>
 
@@ -740,6 +990,45 @@ const AdminStudents: React.FC = () => {
                 onChange={(e) => setForm({ ...form, preferred_schedule: e.target.value })}
               />
             </div>
+
+            <div>
+              <Label>Source (optional)</Label>
+              <Select
+                value={form.source}
+                onValueChange={(val) => setForm({ ...form, source: val })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="How did they hear about us?" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="referral">Referral (Indicated by student)</SelectItem>
+                  <SelectItem value="instagram">Instagram</SelectItem>
+                  <SelectItem value="website">Website</SelectItem>
+                  <SelectItem value="ads">Ads</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {form.source === 'referral' && (
+              <div className="p-3 bg-purple-50 border border-purple-100 rounded-lg">
+                <Label className="text-purple-800">Who referred them?</Label>
+                <Select
+                  value={form.referred_by}
+                  onValueChange={(val) => setForm({ ...form, referred_by: val })}
+                >
+                  <SelectTrigger className="bg-white mt-1">
+                    <SelectValue placeholder="Select a student..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Unknown / Not in list</SelectItem>
+                    {students.map(s => (
+                      <SelectItem key={s.id} value={s.id}>{s.student_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             
             <div className="grid grid-cols-2 gap-4">
               <div>

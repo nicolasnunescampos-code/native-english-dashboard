@@ -15,6 +15,9 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         skipWaiting: true,
         clientsClaim: true,
+        importScripts: ['/login/sw-push.js'],
+        globPatterns: [],
+        navigateFallback: null,
       },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {

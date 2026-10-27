@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Play, ChevronRight, ChevronLeft } from 'lucide-react';
-import { supabase, Video } from '@/lib/supabase';
+import { supabase, Video, isVideoCourseItem } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 
@@ -119,8 +119,9 @@ const StudentVideos: React.FC = () => {
         .select('*');
 
       if (!error && data) {
+        const liveClassVideos = data.filter((v) => !isVideoCourseItem(v));
         // Natural sort to handle "Chapter 1", "Chapter 2", "Chapter 10" correctly
-        const sortedData = data.sort((a, b) =>
+        const sortedData = liveClassVideos.sort((a, b) =>
           a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' })
         );
         setVideos(sortedData);
@@ -147,7 +148,7 @@ const StudentVideos: React.FC = () => {
       <div className="relative h-[40vh] bg-[#1e3a8a] flex items-end p-8 mb-6">
         <div className="relative z-10 max-w-2xl px-4">
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight">
-            Native Video Course
+            Live Classes Videos
           </h1>
         </div>
       </div>

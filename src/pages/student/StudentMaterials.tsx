@@ -8,11 +8,11 @@ import { getThumbnailSrc } from "@/lib/utils"
 interface Material {
   id: number
   title: string
-  title: string
   description: string | null
   url: string
   thumbnail_url?: string
   category: string
+  level?: string
   target_audience?: string
 }
 
@@ -62,16 +62,18 @@ const StudentMaterials = () => {
       }
     )
     .sort((a, b) => {
-      const getLevelScore = (title: string) => {
-        const t = title.toLowerCase();
-        if (t.includes('beginner')) return 1;
-        if (t.includes('intermediate')) return 2;
-        if (t.includes('advanced (1)') || t.includes('advanced 1')) return 3;
-        if (t.includes('advanced (2)') || t.includes('advanced 2')) return 4;
-        if (t.includes('advanced')) return 3;
+      const getLevelScore = (m: Material) => {
+        const level = (m.level || '').toLowerCase();
+        const title = (m.title || '').toLowerCase();
+        
+        if (level.includes('beginner') || title.includes('beginner')) return 1;
+        if (level.includes('intermediate') || title.includes('intermediate')) return 2;
+        if (title.includes('advanced (1)') || title.includes('advanced 1')) return 3;
+        if (title.includes('advanced (2)') || title.includes('advanced 2')) return 4;
+        if (level.includes('advanced') || title.includes('advanced')) return 3;
         return 5;
       };
-      return getLevelScore(a.title) - getLevelScore(b.title);
+      return getLevelScore(a) - getLevelScore(b);
     });
 
   if (loading) {

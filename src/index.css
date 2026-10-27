@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,7 +6,7 @@
 
 @layer base {
   :root {
-    --background: 210 20% 98%;
+    --background: 210 38% 97%;
     --foreground: 222 47% 11%;
 
     --card: 0 0% 100%;
@@ -15,86 +15,108 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    --primary: 217 91% 60%;
+    --primary: 201 90% 48%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
+    --secondary: 210 32% 94%;
+    --secondary-foreground: 222 47% 14%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 210 28% 93%;
+    --muted-foreground: 215 18% 45%;
 
-    --accent: 217 91% 60%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 201 92% 94%;
+    --accent-foreground: 201 90% 38%;
 
-    --success: 142 76% 36%;
+    --success: 152 76% 38%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 92% 50%;
+    --warning: 36 95% 52%;
     --warning-foreground: 0 0% 100%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 356 88% 58%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 217 91% 60%;
+    --border: 212 28% 88%;
+    --input: 212 28% 88%;
+    --ring: 201 90% 48%;
 
-    --radius: 0.5rem;
+    --radius: 1.25rem;
 
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 222 47% 11%;
-    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary: 201 90% 48%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent: 210 30% 95%;
     --sidebar-accent-foreground: 222 47% 11%;
-    --sidebar-border: 214 32% 91%;
-    --sidebar-ring: 217 91% 60%;
+    --sidebar-border: 212 28% 90%;
+    --sidebar-ring: 201 90% 48%;
+
+    /* Apple Liquid Glass Tokens - Light Mode */
+    --glass-bg: rgba(255, 255, 255, 0.64);
+    --glass-bg-hover: rgba(255, 255, 255, 0.76);
+    --glass-bg-strong: rgba(255, 255, 255, 0.80);
+    --glass-bg-subtle: rgba(255, 255, 255, 0.46);
+    --glass-border: rgba(255, 255, 255, 0.80);
+    --glass-border-outer: rgba(15, 23, 42, 0.055);
+    --glass-specular: inset 0 1px 0 0 rgba(255, 255, 255, 0.92), inset 1px 0 0 0 rgba(255, 255, 255, 0.48);
+    --glass-shadow: 0 14px 40px -10px rgba(15, 23, 42, 0.065), 0 4px 14px -3px rgba(15, 23, 42, 0.035);
+    --glass-shadow-hover: 0 22px 48px -12px rgba(15, 23, 42, 0.1), 0 6px 18px -4px rgba(14, 165, 233, 0.08);
   }
 
   .dark {
-    --background: 222 47% 11%;
+    --background: 224 46% 7%;
     --foreground: 210 40% 98%;
 
-    --card: 222 47% 15%;
+    --card: 224 38% 12%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222 47% 15%;
+    --popover: 224 40% 11%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 217 91% 60%;
+    --primary: 199 92% 56%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 217 33% 17%;
+    --secondary: 222 32% 17%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 222 32% 16%;
+    --muted-foreground: 215 20% 68%;
 
-    --accent: 217 33% 17%;
+    --accent: 204 45% 20%;
     --accent-foreground: 210 40% 98%;
 
-    --success: 142 76% 36%;
+    --success: 152 72% 44%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 92% 50%;
+    --warning: 38 94% 54%;
     --warning-foreground: 0 0% 100%;
 
-    --destructive: 0 63% 31%;
+    --destructive: 356 78% 54%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 212 27% 84%;
+    --border: 220 26% 20%;
+    --input: 220 26% 20%;
+    --ring: 199 92% 56%;
 
-    --sidebar-background: 222 47% 11%;
+    --sidebar-background: 224 46% 9%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary: 199 92% 56%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 217 33% 17%;
+    --sidebar-accent: 222 32% 17%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 217 33% 17%;
-    --sidebar-ring: 217 91% 60%;
+    --sidebar-border: 220 26% 18%;
+    --sidebar-ring: 199 92% 56%;
+
+    /* Apple Liquid Glass Tokens - Dark Mode */
+    --glass-bg: rgba(19, 26, 46, 0.56);
+    --glass-bg-hover: rgba(25, 34, 60, 0.70);
+    --glass-bg-strong: rgba(17, 23, 41, 0.78);
+    --glass-bg-subtle: rgba(255, 255, 255, 0.045);
+    --glass-border: rgba(255, 255, 255, 0.13);
+    --glass-border-outer: rgba(0, 0, 0, 0.45);
+    --glass-specular: inset 0 1px 0 0 rgba(255, 255, 255, 0.2), inset 1px 0 0 0 rgba(255, 255, 255, 0.08);
+    --glass-shadow: 0 18px 44px -10px rgba(0, 0, 0, 0.55), 0 4px 16px -2px rgba(0, 0, 0, 0.35);
+    --glass-shadow-hover: 0 24px 54px -12px rgba(0, 0, 0, 0.68), 0 0 28px -4px rgba(56, 189, 248, 0.16);
   }
 }
 
@@ -104,20 +126,437 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'Inter', sans-serif;
+    @apply bg-background text-foreground font-sans antialiased selection:bg-primary/20 selection:text-primary;
+    font-family: -apple-system, BlinkMacSystemFont, 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+    position: relative;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Ambient Apple Liquid Mesh Wallpaper (Fixed behind all glass layers) */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: -15%;
+    z-index: -2;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 14% 18%, rgba(56, 189, 248, 0.22) 0%, transparent 42%),
+      radial-gradient(circle at 86% 12%, rgba(125, 211, 252, 0.20) 0%, transparent 45%),
+      radial-gradient(circle at 78% 82%, rgba(167, 139, 250, 0.14) 0%, transparent 45%),
+      radial-gradient(circle at 18% 85%, rgba(52, 211, 153, 0.12) 0%, transparent 42%),
+      radial-gradient(circle at 50% 48%, rgba(56, 189, 248, 0.10) 0%, transparent 55%);
+    filter: blur(55px);
+    transform: translateZ(0);
+  }
+
+  .dark body::before {
+    background:
+      radial-gradient(circle at 14% 18%, rgba(56, 189, 248, 0.16) 0%, transparent 44%),
+      radial-gradient(circle at 86% 14%, rgba(59, 130, 246, 0.18) 0%, transparent 46%),
+      radial-gradient(circle at 80% 84%, rgba(139, 92, 246, 0.14) 0%, transparent 46%),
+      radial-gradient(circle at 18% 84%, rgba(16, 185, 129, 0.10) 0%, transparent 42%),
+      radial-gradient(circle at 50% 50%, rgba(14, 165, 233, 0.10) 0%, transparent 58%);
+  }
+
+  /* Subtle fine grain / light diffusion layer */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.35) 0%, rgba(241, 245, 249, 0.14) 100%);
+  }
+
+  .dark body::after {
+    background: linear-gradient(180deg, rgba(8, 12, 24, 0.35) 0%, rgba(8, 12, 24, 0.65) 100%);
   }
 }
 
-/* React Big Calendar Overrides for dense readability */
+@layer components {
+  /* Core Liquid Glass Surface */
+  .liquid-glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(28px) saturate(190%);
+    -webkit-backdrop-filter: blur(28px) saturate(190%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-specular), var(--glass-shadow);
+  }
+
+  /* Liquid Glass Rounded Box / Card */
+  .liquid-glass-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(28px) saturate(195%);
+    -webkit-backdrop-filter: blur(28px) saturate(195%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-specular), var(--glass-shadow), 0 0 0 1px var(--glass-border-outer);
+    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+                background-color 0.28s ease,
+                border-color 0.28s ease;
+  }
+
+  .liquid-glass-card:hover {
+    box-shadow: var(--glass-specular), var(--glass-shadow-hover), 0 0 0 1px var(--glass-border-outer);
+  }
+
+  /* Floating Glass Sidebar / Dock */
+  .liquid-glass-sidebar {
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(36px) saturate(210%);
+    -webkit-backdrop-filter: blur(36px) saturate(210%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-specular), var(--glass-shadow), 0 0 0 1px var(--glass-border-outer);
+  }
+
+  /* Floating Modal / Popover / Dropdown Glass */
+  .liquid-glass-modal {
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(38px) saturate(200%);
+    -webkit-backdrop-filter: blur(38px) saturate(200%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-specular),
+                0 28px 70px -12px rgba(15, 23, 42, 0.22),
+                0 0 0 1px var(--glass-border-outer);
+  }
+
+  /* Tactile Glass Pill / Button Surface */
+  .liquid-glass-pill {
+    background: var(--glass-bg-subtle);
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-specular), 0 2px 8px -2px rgba(15, 23, 42, 0.05);
+  }
+
+  /* Translucent Apple Liquid Glass Primary Button (lighter, frosted sky-blue glass) */
+  .liquid-btn-primary {
+    background: linear-gradient(
+      180deg,
+      rgba(56, 189, 248, 0.72) 0%,
+      rgba(14, 165, 233, 0.78) 100%
+    );
+    backdrop-filter: blur(20px) saturate(190%);
+    -webkit-backdrop-filter: blur(20px) saturate(190%);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    box-shadow:
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.75),
+      inset 0 -1px 1px 0 rgba(2, 132, 199, 0.2),
+      0 8px 20px -6px rgba(14, 165, 233, 0.30),
+      0 2px 6px -1px rgba(14, 165, 233, 0.15);
+  }
+
+  .liquid-btn-primary:hover {
+    background: linear-gradient(
+      180deg,
+      rgba(56, 189, 248, 0.82) 0%,
+      rgba(14, 165, 233, 0.86) 100%
+    );
+    box-shadow:
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.85),
+      0 10px 24px -5px rgba(14, 165, 233, 0.38),
+      0 3px 8px -1px rgba(14, 165, 233, 0.22);
+  }
+
+  /* Translucent Apple Sidebar Active Pill */
+  .liquid-nav-active {
+    background: linear-gradient(
+      135deg,
+      rgba(56, 189, 248, 0.22) 0%,
+      rgba(14, 165, 233, 0.14) 100%
+    );
+    backdrop-filter: blur(20px) saturate(190%);
+    -webkit-backdrop-filter: blur(20px) saturate(190%);
+    border: 1px solid rgba(56, 189, 248, 0.42);
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.88),
+      0 6px 16px -4px rgba(14, 165, 233, 0.15);
+  }
+
+  .dark .liquid-nav-active {
+    background: linear-gradient(
+      135deg,
+      rgba(56, 189, 248, 0.22) 0%,
+      rgba(14, 165, 233, 0.12) 100%
+    );
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.22),
+      0 6px 16px -4px rgba(14, 165, 233, 0.22);
+  }
+
+  /* Recessed Frosted Input Well */
+  .liquid-input {
+    background: rgba(255, 255, 255, 0.62);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    box-shadow:
+      inset 0 1px 2px rgba(15, 23, 42, 0.04),
+      0 1px 0 rgba(255, 255, 255, 0.8),
+      0 0 0 1px rgba(15, 23, 42, 0.06);
+  }
+
+  .dark .liquid-input {
+    background: rgba(15, 23, 42, 0.52);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow:
+      inset 0 1px 3px rgba(0, 0, 0, 0.35),
+      0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  /* ============================================================
+     NATIVE ENGLISH BRAND TOKENS & 3D TACTILE SURFACES
+     (Azul-marinho: #2B2F8F, Azul claro: #4FC3E8, Azul gelo: #E6EEFA, Branco: #FFFFFF)
+     ============================================================ */
+  .native-btn-primary {
+    background: #2B2F8F;
+    border: none;
+    box-shadow: 0 5px 0 #1C2068;
+    color: #ffffff;
+    transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
+  }
+  .native-btn-primary:hover:not(:disabled) {
+    background: #3439a8;
+    filter: brightness(1.06);
+  }
+  .native-btn-primary:active:not(:disabled) {
+    transform: translateY(4px);
+    box-shadow: 0 1px 0 #1C2068;
+  }
+
+  .native-btn-accent {
+    background: #4FC3E8;
+    border: none;
+    box-shadow: 0 5px 0 #289FCE;
+    color: #ffffff;
+    transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
+  }
+  .native-btn-accent:hover:not(:disabled) {
+    background: #62ccee;
+    filter: brightness(1.06);
+  }
+  .native-btn-accent:active:not(:disabled) {
+    transform: translateY(4px);
+    box-shadow: 0 1px 0 #289FCE;
+  }
+
+  .native-btn-ice {
+    background: #E6EEFA;
+    border: none;
+    box-shadow: 0 4px 0 #BAC9E2;
+    color: #2B2F8F;
+    transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
+  }
+  .native-btn-ice:hover:not(:disabled) {
+    background: #edf3fc;
+  }
+  .native-btn-ice:active:not(:disabled) {
+    transform: translateY(3px);
+    box-shadow: 0 1px 0 #BAC9E2;
+  }
+
+  .native-btn-gold {
+    background: #FFC800;
+    border: none;
+    box-shadow: 0 5px 0 #E5A500;
+    color: #7A4900;
+    transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
+  }
+  .native-btn-gold:hover:not(:disabled) {
+    background: #ffd224;
+    filter: brightness(1.05);
+  }
+  .native-btn-gold:active:not(:disabled) {
+    transform: translateY(4px);
+    box-shadow: 0 1px 0 #E5A500;
+  }
+
+  /* 3D Tactile Circle Map Nodes in Brand Colors */
+  .duo-node-blue {
+    background: #4FC3E8;
+    box-shadow: 0 7px 0 #289FCE, 0 10px 16px rgba(43, 47, 143, 0.22);
+  }
+  .duo-node-blue:hover {
+    background: #5fd0f5;
+    box-shadow: 0 8px 0 #289FCE, 0 12px 18px rgba(43, 47, 143, 0.28);
+  }
+  .duo-node-blue:active {
+    transform: translateY(5px);
+    box-shadow: 0 2px 0 #289FCE, 0 4px 8px rgba(43, 47, 143, 0.18);
+  }
+
+  .duo-node-navy {
+    background: #2B2F8F;
+    box-shadow: 0 7px 0 #1C2068, 0 10px 16px rgba(43, 47, 143, 0.28);
+  }
+  .duo-node-navy:hover {
+    background: #373cb0;
+    box-shadow: 0 8px 0 #1C2068, 0 12px 18px rgba(43, 47, 143, 0.35);
+  }
+  .duo-node-navy:active {
+    transform: translateY(5px);
+    box-shadow: 0 2px 0 #1C2068, 0 4px 8px rgba(43, 47, 143, 0.2);
+  }
+
+  .duo-node-gold {
+    background: #FFC800;
+    box-shadow: 0 7px 0 #E5A500, 0 10px 16px rgba(229, 165, 0, 0.28);
+  }
+  .duo-node-gold:hover {
+    background: #ffd01f;
+    box-shadow: 0 8px 0 #E5A500, 0 12px 18px rgba(229, 165, 0, 0.35);
+  }
+  .duo-node-gold:active {
+    transform: translateY(5px);
+    box-shadow: 0 2px 0 #E5A500, 0 4px 8px rgba(229, 165, 0, 0.2);
+  }
+
+  .duo-node-locked {
+    background: #E6EEFA;
+    box-shadow: 0 7px 0 #C4D3EA, 0 6px 12px rgba(43, 47, 143, 0.08);
+    cursor: pointer;
+  }
+  .dark .duo-node-locked {
+    background: #182038;
+    box-shadow: 0 7px 0 #0E1428, 0 8px 14px rgba(0, 0, 0, 0.35);
+  }
+  .duo-node-locked:active {
+    transform: translateY(3px);
+  }
+  .dark .duo-node-locked:active {
+    box-shadow: 0 3px 0 #0E1428, 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+
+  /* Duolingo Popover Bubble with pointing arrow */
+  .duo-speech-bubble {
+    position: relative;
+    filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.25));
+  }
+  .duo-speech-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-top: 10px solid var(--duo-bubble-bg, #ffffff);
+  }
+  .dark .duo-speech-bubble::after {
+    border-top-color: var(--duo-bubble-bg-dark, #18272f);
+  }
+  .duo-speech-bubble-top::after {
+    top: -10px;
+    bottom: auto;
+    border-top: none;
+    border-bottom: 10px solid var(--duo-bubble-bg, #ffffff);
+  }
+  .dark .duo-speech-bubble-top::after {
+    border-bottom-color: var(--duo-bubble-bg-dark, #18272f);
+  }
+
+  @keyframes duo-wiggle {
+    0%, 100% { transform: rotate(-2deg); }
+    50% { transform: rotate(2deg); }
+  }
+  .animate-duo-wiggle {
+    animation: duo-wiggle 2.2s ease-in-out infinite;
+  }
+
+  @keyframes duo-float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-7px); }
+  }
+  .animate-duo-float {
+    animation: duo-float 2s ease-in-out infinite;
+  }
+}
+
+/* Custom sleek scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.55);
+}
+
+/* React Big Calendar Overrides for Apple Liquid Glass readability */
+.rbc-calendar {
+  font-family: inherit;
+}
+.rbc-toolbar {
+  margin-bottom: 14px !important;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rbc-toolbar button {
+  border-radius: 9999px !important;
+  border: 1px solid var(--glass-border) !important;
+  background: var(--glass-bg-subtle) !important;
+  backdrop-filter: blur(12px);
+  color: hsl(var(--foreground)) !important;
+  padding: 5px 14px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.rbc-toolbar button:hover {
+  background: var(--glass-bg-strong) !important;
+  transform: translateY(-1px);
+}
+.rbc-toolbar button.rbc-active {
+  background: rgba(56, 189, 248, 0.22) !important;
+  color: hsl(var(--primary)) !important;
+  border-color: rgba(56, 189, 248, 0.45) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 4px 12px rgba(14, 165, 233, 0.16) !important;
+}
+.rbc-time-view,
+.rbc-month-view {
+  border-radius: 18px !important;
+  border: 1px solid rgba(148, 163, 184, 0.2) !important;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.35);
+}
+.dark .rbc-time-view,
+.dark .rbc-month-view {
+  background: rgba(15, 23, 42, 0.35);
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+.rbc-header {
+  padding: 8px 4px !important;
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18) !important;
+}
+.rbc-today {
+  background-color: rgba(56, 189, 248, 0.06) !important;
+}
 .rbc-event {
-  padding: 1px !important;
-  border: 1px solid rgba(255,255,255,0.2) !important;
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05);
+  padding: 2px 4px !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.45) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 3px 8px rgba(0, 0, 0, 0.10) !important;
+  backdrop-filter: blur(8px) saturate(160%);
 }
 .rbc-event-content {
   height: 100%;
 }
 .rbc-time-content > * + * > * {
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  border-left: 1px solid rgba(148, 163, 184, 0.14);
+}
+.rbc-timeslot-group {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12) !important;
 }

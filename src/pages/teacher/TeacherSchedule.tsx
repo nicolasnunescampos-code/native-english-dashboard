@@ -337,7 +337,31 @@ export default function TeacherSchedule() {
         </CardHeader>
         <CardContent>
           <div className="rounded-md border overflow-hidden">
-            <ReadOnlyCalendar role="teacher" identifier={teacherName || ''} />
+            <ReadOnlyCalendar 
+              role="teacher" 
+              identifier={teacherName || ''} 
+              onEventClick={(event: any) => {
+                const ids = [event.resource.id, ...(event.resource.merged_ids || [])];
+                for (const id of ids) {
+                  if (!id) continue;
+                  const el = document.getElementById(`class-block-${id}`);
+                  if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Highlight effect
+                    const originalBorder = el.style.borderColor;
+                    const originalShadow = el.style.boxShadow;
+                    el.style.transition = 'all 0.3s ease';
+                    el.style.borderColor = 'hsl(var(--primary))';
+                    el.style.boxShadow = '0 0 0 1px hsl(var(--primary))';
+                    setTimeout(() => {
+                      el.style.borderColor = originalBorder;
+                      el.style.boxShadow = originalShadow;
+                    }, 2000);
+                    break;
+                  }
+                }
+              }}
+            />
           </div>
         </CardContent>
       </Card>
@@ -354,6 +378,7 @@ export default function TeacherSchedule() {
             {dayClasses.map(cls => (
               <div
                 key={cls.id || cls.student_name + cls.time}
+                id={`class-block-${cls.id}`}
                 className="rounded-xl border bg-card text-card-foreground p-5 shadow-sm flex justify-between"
               >
                 <div>
