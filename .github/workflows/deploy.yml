@@ -40,6 +40,6 @@ jobs:
           server: ${{ steps.ftp_prep.outputs.host }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: public_html/login/
+          server-dir: login/
           local-dir: ./dist/
           dangerous-clean-slate: false
