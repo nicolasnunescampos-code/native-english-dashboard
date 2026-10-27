@@ -26,10 +26,18 @@ jobs:
       - name: 🏗️ Build Project
         run: npm run build
 
+      - name: 🧹 Clean FTP Hostname
+        id: ftp_prep
+        run: |
+          RAW="${{ secrets.FTP_SERVER }}"
+          # Remove protocol (ftp://, https://), trailing path/slashes, and ports if accidentally pasted
+          CLEAN=$(echo "$RAW" | sed -E 's|^[a-zA-Z]+://||; s|/.*||; s|:[0-9]+$||; s|[[:space:]]||g')
+          echo "host=$CLEAN" >> $GITHUB_OUTPUT
+
       - name: 📂 Sync files to Hostinger
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server: ${{ secrets.FTP_SERVER }}
+          server: ${{ steps.ftp_prep.outputs.host }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           server-dir: public_html/login/
