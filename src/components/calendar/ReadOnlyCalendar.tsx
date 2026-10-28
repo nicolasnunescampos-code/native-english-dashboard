@@ -101,7 +101,12 @@ export const ReadOnlyCalendar: React.FC<ReadOnlyCalendarProps> = ({ role, identi
         }
 
         if (data) {
-            const rawEvents: CalendarClassEvent[] = data.map((cls: any) => {
+            const validData = data.filter((cls: any) => {
+                if (cls.status === 'cancelled' || cls.status === 'rescheduled') return false;
+                if (cls.notes && (cls.notes.includes('[Cancelled]') || cls.notes.includes('[Rescheduled]'))) return false;
+                return true;
+            });
+            const rawEvents: CalendarClassEvent[] = validData.map((cls: any) => {
                 const dateStr = cls.date;
                 const startTimeStr = cls.start_time || cls.time || '10:00';
                 const timeZone = cls.timezone || 'America/Sao_Paulo';
@@ -213,6 +218,16 @@ export const ReadOnlyCalendar: React.FC<ReadOnlyCalendarProps> = ({ role, identi
             fetchClasses(currentRange.start, currentRange.end);
         }
     }, [currentRange, teachers, identifier]);
+
+    useEffect(() => {
+        const handleRescheduled = () => {
+            fetchClasses(currentRange.start, currentRange.end);
+        };
+        window.addEventListener('class-rescheduled', handleRescheduled);
+        return () => {
+            window.removeEventListener('class-rescheduled', handleRescheduled);
+        };
+    }, [currentRange]);
 
     const handleRangeChange = useCallback((range: Date[] | { start: Date; end: Date }) => {
         let start, end;

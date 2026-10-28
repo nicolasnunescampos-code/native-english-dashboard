@@ -79,10 +79,11 @@ export async function linkRecuperationToScheduledClass({
     const scheduledNote = `[Scheduled: ${classDate} ${classTime}${teacherName ? ` with ${teacherName}` : ''}] [Class ID: ${classId}]`;
     const updatedNotes = existingNotes ? `${existingNotes} | ${scheduledNote}` : scheduledNote;
 
-    // 2. Update recuperation date to the newly scheduled date
+    // 2. Mark recuperation as completed/resolved now that date and time have been set by admin
     const { error: recupErr } = await supabase
       .from('recuperation_classes')
       .update({
+        status: 'completed',
         date: classDate,
         notes: updatedNotes,
       })
@@ -204,7 +205,27 @@ export async function fetchPendingRecuperations(): Promise<PendingRecuperationIt
     // 1. Auto-resolve any past classes/sessions first
     await syncRecuperationsStatus();
 
-    // 2. Fetch pending recuperations and students table in parallel
+    // 2. Auto-resolve any recuperation where date/time has already been set by admin
+    try {
+      const { data: alreadyScheduled } = await supabase
+        .from('recuperation_classes')
+        .select('id, notes')
+        .eq('status', 'pending')
+        .or('notes.ilike.%[Scheduled:%,notes.ilike.%[Class ID:%');
+
+      if (alreadyScheduled && alreadyScheduled.length > 0) {
+        for (const item of alreadyScheduled) {
+          await supabase
+            .from('recuperation_classes')
+            .update({ status: 'completed' })
+            .eq('id', item.id);
+        }
+      }
+    } catch (e) {
+      // Non-blocking fallback
+    }
+
+    // 3. Fetch pending recuperations and students table in parallel
     const [recupsRes, studentsRes] = await Promise.all([
       supabase
         .from('recuperation_classes')

@@ -39,6 +39,7 @@ const extractTeacherName = (title: string) => {
 const StudentClasses: React.FC = () => {
   const { studentName, user } = useAuth();
   const [classes, setClasses] = useState<Class[]>([]);
+  const [calendarKey, setCalendarKey] = useState(0);
   const [nextChapters, setNextChapters] = useState<Partial<Record<ClassType, NextChapterInfo>>>({});
   const [loading, setLoading] = useState(true);
 
@@ -76,7 +77,10 @@ const StudentClasses: React.FC = () => {
           .order('time', { ascending: true });
 
         if (error) throw error;
-        setClasses(data || []);
+        const validClasses = (data || []).filter(
+          (c: any) => c.status !== 'cancelled' && c.status !== 'rescheduled'
+        );
+        setClasses(validClasses);
 
         const chapters = await fetchStudentNextChapters(studentName);
         setNextChapters(chapters);
@@ -94,11 +98,30 @@ const StudentClasses: React.FC = () => {
     try {
       if (!user) throw new Error("Not logged in");
       
-      // 1. Delete class
-      const { error: deleteError } = await supabase.from('classes').delete().eq('id', cls.id);
-      if (deleteError) throw deleteError;
+      // 1. Delete associated assignments first
+      try {
+        await supabase.from('class_assignments').delete().eq('class_id', cls.id);
+      } catch (assignErr) {
+        console.warn('Could not delete class_assignments:', assignErr);
+      }
 
-      // 2. Add recuperation
+      // 2. Delete class from classes table
+      const { error: deleteError } = await supabase.from('classes').delete().eq('id', cls.id);
+      
+      // If direct delete is prevented by DB foreign keys or RLS, update status to cancelled and clear student_name
+      if (deleteError) {
+        console.warn('Direct delete failed, marking cancelled instead:', deleteError);
+        await supabase
+          .from('classes')
+          .update({
+            status: 'cancelled',
+            student_name: '',
+            notes: `Rescheduled by student ${studentName || user.email}. [Cancelled]`,
+          })
+          .eq('id', cls.id);
+      }
+
+      // 3. Add recuperation credit
       const { error: recupError } = await supabase.from('recuperation_classes').insert({
         student_id: user.id,
         status: 'pending',
@@ -107,7 +130,7 @@ const StudentClasses: React.FC = () => {
       });
       if (recupError) throw recupError;
 
-      // 3. Notify teacher (optional, doing it if possible)
+      // 4. Notify teacher (optional, doing it if possible)
       const teacherName = extractTeacherName(cls.title);
       if (teacherName) {
         const { data: teacherData } = await supabase.from('teachers').select('id').ilike('name', teacherName).maybeSingle();
@@ -121,7 +144,7 @@ const StudentClasses: React.FC = () => {
         }
       }
 
-      // 4. Notify admins so they can slot the extra class and add to personal calendar
+      // 5. Notify admins so they can slot the extra class and add to personal calendar
       try {
         const { data: admins } = await supabase.from('admins').select('id');
         if (admins && admins.length > 0) {
@@ -138,7 +161,11 @@ const StudentClasses: React.FC = () => {
       }
 
       toast.success('Class rescheduled! A recuperation credit has been added.');
+
+      // 6. Remove class from list, refresh calendar, and notify other views
       setClasses(prev => prev.filter(c => c.id !== cls.id));
+      setCalendarKey(prev => prev + 1);
+      window.dispatchEvent(new CustomEvent('class-rescheduled', { detail: { classId: cls.id } }));
 
     } catch (err: any) {
       console.error(err);
@@ -163,7 +190,7 @@ const StudentClasses: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="rounded-md border bg-card shadow-sm overflow-hidden">
-        <ReadOnlyCalendar role="student" identifier={studentName || ''} />
+        <ReadOnlyCalendar key={calendarKey} role="student" identifier={studentName || ''} />
       </div>
 
       <h2 className="text-xl font-semibold flex items-center gap-2 mt-8">

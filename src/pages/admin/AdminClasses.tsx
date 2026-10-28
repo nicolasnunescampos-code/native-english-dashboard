@@ -137,14 +137,14 @@ export default function AdminClasses() {
 
     const { data, error } = await supabase
       .from('classes')
-      .select('id, student_name, title, date, time, timezone, link_url')
+      .select('id, student_name, title, date, time, timezone, link_url, status')
       .gte('date', today)
       .lte('date', nextWeek)
       .order('date', { ascending: true })
       .order('time', { ascending: true })
 
     if (!error && data) {
-      setClasses(data)
+      setClasses(data.filter((c: any) => c.status !== 'cancelled' && c.status !== 'rescheduled'))
     }
 
     // Load students for the dropdown
@@ -244,12 +244,24 @@ export default function AdminClasses() {
       )
       const studentId = studentMatch?.id || ''
 
+      try {
+        await supabase.from('class_assignments').delete().eq('class_id', selected.id)
+      } catch (e) {
+        console.warn('Could not delete class_assignments:', e)
+      }
+
       const { error: delError } = await supabase
         .from('classes')
         .delete()
         .eq('id', selected.id)
 
-      if (delError) throw delError
+      if (delError) {
+        console.warn('Direct delete failed, marking cancelled instead:', delError)
+        await supabase
+          .from('classes')
+          .update({ status: 'cancelled', student_name: '' })
+          .eq('id', selected.id)
+      }
 
       if (studentId) {
         await grantRecuperationCredit({

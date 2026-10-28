@@ -130,8 +130,12 @@ const AdminCalendar: React.FC = () => {
         }
 
         if (data) {
-            // console.log('AdminCalendar: raw data', data);
-            const rawEvents: CalendarClassEvent[] = data.map((cls: any) => {
+            const validData = data.filter((cls: any) => {
+                if (cls.status === 'cancelled' || cls.status === 'rescheduled') return false;
+                if (cls.notes && (cls.notes.includes('[Cancelled]') || cls.notes.includes('[Rescheduled]'))) return false;
+                return true;
+            });
+            const rawEvents: CalendarClassEvent[] = validData.map((cls: any) => {
                 const dateStr = cls.date;
                 const startTimeStr = cls.start_time || cls.time || '10:00';
                 const timeZone = cls.timezone || 'America/Sao_Paulo';
@@ -269,6 +273,17 @@ const AdminCalendar: React.FC = () => {
         }
     }, [currentRange, teachers]);
 
+    useEffect(() => {
+        const handleClassRescheduled = () => {
+            fetchClasses(currentRange.start, currentRange.end);
+            loadPendingRecuperations();
+        };
+        window.addEventListener('class-rescheduled', handleClassRescheduled);
+        return () => {
+            window.removeEventListener('class-rescheduled', handleClassRescheduled);
+        };
+    }, [currentRange]);
+
     // Handle specific fetch dependency
     const handleRangeChange = useCallback((range: Date[] | { start: Date; end: Date }, view?: View) => {
         let start, end;
@@ -363,9 +378,18 @@ const AdminCalendar: React.FC = () => {
             const student = students.find(s => s.id === studentId);
             const studentName = student?.student_name || 'Student';
 
-            // 1. Delete the original cancelled class
+            // 1. Delete associated assignments, then the original cancelled class
+            try {
+                await supabase.from('class_assignments').delete().eq('class_id', data.id);
+            } catch (assignErr) {
+                console.warn('Could not delete class_assignments:', assignErr);
+            }
+
             const { error: deleteErr } = await supabase.from('classes').delete().eq('id', data.id);
-            if (deleteErr) throw deleteErr;
+            if (deleteErr) {
+                console.warn('Direct delete failed, marking cancelled instead:', deleteErr);
+                await supabase.from('classes').update({ status: 'cancelled', student_name: '' }).eq('id', data.id);
+            }
 
             // 2. Grant recuperation credit in DB
             const res = await grantRecuperationCredit({
