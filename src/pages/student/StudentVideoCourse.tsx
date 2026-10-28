@@ -15,6 +15,8 @@ import {
   Video,
   isVideoCourseItem,
   cleanVideoDescription,
+  sortVideosByNumber,
+  getVideoBadgeLabel,
 } from '@/lib/supabase';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { useAuth } from '@/contexts/AuthContext';
@@ -73,42 +75,42 @@ const getThumbnailSrc = (url: string, videoUrl?: string) => {
 const PLACEHOLDER_MODULES = [
   {
     id: -1,
-    badge: 'LESSON 1',
+    badge: 'CHAPTER 01',
     title: 'Foundations & Essential Structures',
     level: 'Beginner',
     description: 'Core sentence patterns, everyday greetings, and essential pronunciation.',
   },
   {
     id: -2,
-    badge: 'LESSON 2',
+    badge: 'CHAPTER 02',
     title: 'Everyday Conversations & Listening',
     level: 'Beginner',
     description: 'Real-world dialogues, active listening strategies, and natural phrasing.',
   },
   {
     id: -3,
-    badge: 'LESSON 1',
+    badge: 'CHAPTER 01',
     title: 'Connecting Ideas & Past Tenses',
     level: 'Intermediate',
     description: 'Storytelling, past experiences, and linking thoughts smoothly in English.',
   },
   {
     id: -4,
-    badge: 'LESSON 2',
+    badge: 'CHAPTER 02',
     title: 'Intermediate Fluency & Idioms',
     level: 'Intermediate',
     description: 'Phrasal verbs, native expressions, and confident daily communication.',
   },
   {
     id: -5,
-    badge: 'LESSON 1',
+    badge: 'CHAPTER 01',
     title: 'Advanced Nuance & Debate',
     level: 'Advanced',
     description: 'Complex grammar structures, persuasive speaking, and native speed.',
   },
   {
     id: -6,
-    badge: 'LESSON 2',
+    badge: 'CHAPTER 02',
     title: 'Mastery & Professional English',
     level: 'Advanced',
     description: 'Executive communication, cultural idioms, and complete fluency.',
@@ -124,7 +126,7 @@ const VideoCard = ({
   index: number;
   badgeOverride?: string;
 }) => {
-  const badgeLabel = badgeOverride || `LESSON ${index + 1}`;
+  const badgeLabel = badgeOverride || getVideoBadgeLabel(video, index);
 
   return (
     <Dialog>
@@ -236,21 +238,11 @@ const StudentVideoCourse: React.FC = () => {
             ...v,
             description: cleanVideoDescription(v.description),
           }))
-          .sort((a, b) =>
-            a.title.localeCompare(b.title, undefined, {
-              numeric: true,
-              sensitivity: 'base',
-            })
-          );
+          .sort(sortVideosByNumber);
 
         const liveItems = data
           .filter((v) => !isVideoCourseItem(v))
-          .sort((a, b) =>
-            a.title.localeCompare(b.title, undefined, {
-              numeric: true,
-              sensitivity: 'base',
-            })
-          );
+          .sort(sortVideosByNumber);
 
         setCourseVideos(courseItems);
         setLiveClassVideos(liveItems);
@@ -633,7 +625,6 @@ const StudentVideoCourse: React.FC = () => {
                                   key={video.id}
                                   video={video}
                                   index={idx}
-                                  badgeOverride={`LESSON ${idx + 1}`}
                                 />
                               ))}
                             </div>

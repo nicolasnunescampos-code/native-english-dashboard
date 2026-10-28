@@ -131,6 +131,83 @@ export function encodeVideoCourseDescription(description?: string | null): strin
   const clean = cleanVideoDescription(description);
   return clean ? `[VideoCourse] ${clean}` : '[VideoCourse]';
 }
+
+export function extractVideoNumber(video: {
+  title?: string;
+  description?: string;
+  thumbnail_url?: string;
+}): number {
+  // 1. Try from title: "Chapter 1", "Ch 1", "Lesson 1", "1. Verb to Be", "01 - Verb to Be", "Chapter 01"
+  const titleMatch =
+    video.title?.match(/(?:chapter|lesson|ch|modulo|module|ch\.)\s*0*(\d+)/i) ||
+    video.title?.match(/^0*(\d+)[\s.:\-_]/);
+  if (titleMatch) {
+    return parseInt(titleMatch[1], 10);
+  }
+
+  // 2. Try from thumbnail_url filename: e.g. "Ch_01___Verb_To_Be", "Chapter_04", "Ch05"
+  if (video.thumbnail_url) {
+    try {
+      const decodedUrl = decodeURIComponent(video.thumbnail_url);
+      const thumbMatch =
+        decodedUrl.match(/(?:ch|chapter|lesson|module)[_\s-]*0*(\d+)/i) ||
+        decodedUrl.match(/[_\s\-\/]0*(\d+)[\s_\-\.][^/]*$/i);
+      if (thumbMatch) {
+        return parseInt(thumbMatch[1], 10);
+      }
+    } catch {
+      // ignore URI malformed error
+    }
+  }
+
+  // 3. Try from description
+  if (video.description) {
+    const descMatch = video.description.match(
+      /(?:chapter|lesson|ch|modulo|module)\s*0*(\d+)/i
+    );
+    if (descMatch) {
+      return parseInt(descMatch[1], 10);
+    }
+  }
+
+  return 999999;
+}
+
+export function sortVideosByNumber(
+  a: { title: string; description?: string; thumbnail_url?: string },
+  b: { title: string; description?: string; thumbnail_url?: string }
+): number {
+  const numA = extractVideoNumber(a);
+  const numB = extractVideoNumber(b);
+  if (numA !== numB) {
+    return numA - numB;
+  }
+  return a.title.localeCompare(b.title, undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  });
+}
+
+export function getVideoBadgeLabel(
+  video: {
+    title?: string;
+    description?: string;
+    thumbnail_url?: string;
+  },
+  defaultIndex?: number
+): string {
+  const num = extractVideoNumber(video);
+  if (num < 999999) {
+    const isLesson =
+      /(?:lesson|aula)\s*0*\d+/i.test(video.title || '') ||
+      /(?:lesson|aula)\s*0*\d+/i.test(video.description || '') ||
+      /(?:lesson|aula)[_\s-]*0*\d+/i.test(video.thumbnail_url || '');
+    const prefix = isLesson ? 'LESSON' : 'CHAPTER';
+    const formattedNum = num < 10 ? `0${num}` : `${num}`;
+    return `${prefix} ${formattedNum}`;
+  }
+  return defaultIndex !== undefined ? `LESSON ${defaultIndex + 1}` : 'LESSON';
+}
 export interface Audio {
   id?: number;
   title: string;

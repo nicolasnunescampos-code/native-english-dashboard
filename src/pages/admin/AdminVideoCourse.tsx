@@ -10,6 +10,7 @@ import {
     isVideoCourseItem,
     cleanVideoDescription,
     encodeVideoCourseDescription,
+    sortVideosByNumber,
 } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Trash2, Plus, Pencil, ExternalLink, Radio, Film } from 'lucide-react';
@@ -233,8 +234,8 @@ const AdminVideoCourse: React.FC = () => {
         }
     };
 
-    const liveClassesVideos = videos.filter((v) => !isVideoCourseItem(v));
-    const courseModulesVideos = videos.filter((v) => isVideoCourseItem(v));
+    const liveClassesVideos = [...videos.filter((v) => !isVideoCourseItem(v))].sort(sortVideosByNumber);
+    const courseModulesVideos = [...videos.filter((v) => isVideoCourseItem(v))].sort(sortVideosByNumber);
     const currentModuleVideos =
         activeModuleTab === 'live_classes' ? liveClassesVideos : courseModulesVideos;
 
