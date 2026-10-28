@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
@@ -57,6 +57,7 @@ const studentNavItems: NavItem[] = [
     icon: <BookOpen className="h-4 w-4" />,
     subItems: [
       { label: 'Books', path: '/student/materials', icon: <BookOpen className="h-4 w-4" /> },
+      { label: 'Work Book', path: '/student/materials?category=Workbook', icon: <FileText className="h-4 w-4" /> },
       { label: 'Audios', path: '/student/audios', icon: <Megaphone className="h-4 w-4" /> },
     ]
   },
@@ -80,6 +81,7 @@ const teacherNavItems: NavItem[] = [
     icon: <BookOpen className="h-4 w-4" />,
     subItems: [
       { label: 'Books', path: '/teacher/materials', icon: <BookOpen className="h-4 w-4" /> },
+      { label: 'Work Book', path: '/teacher/materials?category=Workbook', icon: <FileText className="h-4 w-4" /> },
       { label: 'Audios', path: '/teacher/audios', icon: <Megaphone className="h-4 w-4" /> },
     ]
   },
@@ -147,6 +149,7 @@ const adminNavItems: NavItem[] = [
 ]
 
 export const Sidebar: React.FC = () => {
+  const location = useLocation()
   const { role, signOut, user, studentName, teacherName, rulesAgreed } = useAuth()
   const [open, setOpen] = useState(false)
   const [totalUnread, setTotalUnread] = useState(0)
@@ -352,33 +355,37 @@ export const Sidebar: React.FC = () => {
                   </button>
                   {isOpen && (
                     <ul className="mt-1.5 mb-1 space-y-1 ml-5 border-l border-primary/25 dark:border-white/15 pl-3">
-                      {item.subItems.map(subItem => (
-                        <li key={subItem.path}>
-                          <NavLink
-                            to={subItem.path}
-                            end
-                            onClick={() => setOpen(false)}
-                            className={({ isActive }) =>
-                              cn(
+                      {item.subItems.map(subItem => {
+                        const isSubActive = subItem.path.includes('?')
+                          ? location.pathname + location.search === subItem.path
+                          : location.pathname === subItem.path && (!location.search || !location.search.includes('category=Workbook'));
+
+                        return (
+                          <li key={subItem.path}>
+                            <NavLink
+                              to={subItem.path}
+                              end
+                              onClick={() => setOpen(false)}
+                              className={cn(
                                 'flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200',
-                                isActive
+                                isSubActive
                                   ? 'liquid-nav-active text-sky-700 dark:text-sky-200'
                                   : 'text-muted-foreground hover:bg-white/50 dark:hover:bg-white/[0.06] hover:text-foreground'
-                              )
-                            }
-                          >
-                            <div className="flex items-center gap-2.5 w-full">
-                              {subItem.icon}
-                              <span>{subItem.label}</span>
-                              {subItem.label === 'Recuperations' && pendingRecupsCount > 0 && (
-                                <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-auto shadow-sm">
-                                  {pendingRecupsCount}
-                                </span>
                               )}
-                            </div>
-                          </NavLink>
-                        </li>
-                      ))}
+                            >
+                              <div className="flex items-center gap-2.5 w-full">
+                                {subItem.icon}
+                                <span>{subItem.label}</span>
+                                {subItem.label === 'Recuperations' && pendingRecupsCount > 0 && (
+                                  <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-auto shadow-sm">
+                                    {pendingRecupsCount}
+                                  </span>
+                                )}
+                              </div>
+                            </NavLink>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </li>

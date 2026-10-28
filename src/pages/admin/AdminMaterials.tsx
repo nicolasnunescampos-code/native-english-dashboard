@@ -27,7 +27,7 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 
-const CATEGORIES = ['Grammar', 'Reading', 'Listening', 'Club (Reading)', 'Club (Listening)', 'Club'];
+const CATEGORIES = ['Grammar', 'Workbook', 'Reading', 'Listening', 'Club (Reading)', 'Club (Listening)', 'Club'];
 
 const getDriveId = (url: string) => {
     if (!url) return null;
@@ -244,7 +244,7 @@ const AdminMaterials: React.FC = () => {
                                             onClick={() => setCategory(cat)}
                                             size="sm"
                                         >
-                                            {cat === 'Club' ? 'Conversation Club' : cat}
+                                            {cat === 'Workbook' ? 'Work Book' : cat === 'Club' ? 'Conversation Club' : cat}
                                         </Button>
                                     ))}
                                 </div>
@@ -356,7 +356,7 @@ const AdminMaterials: React.FC = () => {
                     <TabsList className="mb-6 flex flex-wrap h-auto gap-2 p-1">
                         {CATEGORIES.map(cat => (
                             <TabsTrigger key={cat} value={cat}>
-                                {cat === 'Club' ? 'Conversation Club' : cat}
+                                {cat === 'Workbook' ? 'Work Book' : cat === 'Club' ? 'Conversation Club' : cat}
                             </TabsTrigger>
                         ))}
                     </TabsList>
