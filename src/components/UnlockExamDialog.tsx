@@ -23,15 +23,68 @@ export function UnlockExamDialog({ studentName, variant = "default", size = "def
 
     useEffect(() => {
         if (isDialogOpen) {
-            fetchExams();
+            fetchExamsAndSelect();
         }
     }, [isDialogOpen]);
 
-    async function fetchExams() {
+    async function fetchExamsAndSelect() {
         const { data } = await supabase.from('exams').select('*').order('level').order('chapter_number');
-        if (data) {
+        if (data && data.length > 0) {
             setExams(data);
+
+            // Try to auto-select matching exam for student based on recent grammar class
+            try {
+                const cleanName = studentName?.trim() || "";
+                const { data: lastGrammar } = await supabase
+                    .from('classes')
+                    .select('class_level, class_chapter')
+                    .or(`student_name.ilike.%${cleanName}%,student_name.eq.${cleanName}`)
+                    .eq('class_type', 'Grammar')
+                    .not('class_grade', 'is', null)
+                    .order('date', { ascending: false })
+                    .order('time', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                if (lastGrammar) {
+                    const targetChapterNum = lastGrammar.class_chapter === '10' ? 2 : 1;
+                    const match = data.find(e => 
+                        e.chapter_number === targetChapterNum &&
+                        (!lastGrammar.class_level || e.level.toLowerCase() === lastGrammar.class_level.toLowerCase())
+                    );
+                    if (match) {
+                        setSelectedExamId(match.id);
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.error("Error auto-detecting exam:", err);
+            }
+
+            if (!selectedExamId) {
+                setSelectedExamId(data[0].id);
+            }
         }
+    }
+
+    async function getStudentId(): Promise<string | null> {
+        const cleanName = studentName?.trim() || "";
+        const { data: s1 } = await supabase
+            .from('students')
+            .select('id')
+            .ilike('student_name', cleanName)
+            .maybeSingle();
+
+        if (s1?.id) return s1.id;
+
+        const { data: s2 } = await supabase
+            .from('students')
+            .select('id')
+            .or(`student_name.ilike.%${cleanName}%,student_name.eq.${cleanName}`)
+            .limit(1)
+            .maybeSingle();
+
+        return s2?.id || null;
     }
 
     async function handleUnlockExam() {
@@ -39,14 +92,8 @@ export function UnlockExamDialog({ studentName, variant = "default", size = "def
         setUnlocking(true);
 
         try {
-            // 1. Find the student ID from the students table
-            const { data: studentData, error: studentError } = await supabase
-                .from('students')
-                .select('id')
-                .eq('student_name', studentName)
-                .maybeSingle();
-            
-            if (studentError || !studentData?.id) {
+            const studentId = await getStudentId();
+            if (!studentId) {
                 throw new Error('Student ID not found in database.');
             }
 
@@ -62,7 +109,7 @@ export function UnlockExamDialog({ studentName, variant = "default", size = "def
             const { data: existing } = await supabase
                 .from('exam_submissions')
                 .select('exam_id')
-                .eq('student_id', studentData.id)
+                .eq('student_id', studentId)
                 .eq('exam_id', examToUnlock.id);
 
             if (existing && existing.length > 0) {
@@ -75,7 +122,7 @@ export function UnlockExamDialog({ studentName, variant = "default", size = "def
             const { error: insertError } = await supabase
                 .from('exam_submissions')
                 .insert({
-                    student_id: studentData.id,
+                    student_id: studentId,
                     exam_id: examToUnlock.id,
                     assigned_by: user?.id
                 });
@@ -85,6 +132,7 @@ export function UnlockExamDialog({ studentName, variant = "default", size = "def
             toast.success(`Exam unlocked successfully for the student!`);
             setIsDialogOpen(false);
             setSelectedExamId('');
+            window.location.reload();
         } catch (error: any) {
             console.error(error);
             toast.error(error.message || 'Failed to unlock exam.');
@@ -106,27 +154,21 @@ export function UnlockExamDialog({ studentName, variant = "default", size = "def
         setCanceling(true);
 
         try {
-            const { data: studentData } = await supabase
-                .from('students')
-                .select('id')
-                .eq('student_name', studentName)
-                .maybeSingle();
-
-            if (!studentData?.id) {
+            const studentId = await getStudentId();
+            if (!studentId) {
                 throw new Error("Student not found");
             }
 
-            // Delete any existing pending unlocked exam for this student
+            // Delete any existing submission for this student and exam
             await supabase
                 .from('exam_submissions')
                 .delete()
-                .eq('student_id', studentData.id)
-                .eq('exam_id', examToCancel.id)
-                .is('completed_at', null);
+                .eq('student_id', studentId)
+                .eq('exam_id', examToCancel.id);
 
             // Insert a bypassed submission to satisfy the requirement
             const { error } = await supabase.from('exam_submissions').insert({
-                student_id: studentData.id,
+                student_id: studentId,
                 exam_id: examToCancel.id,
                 assigned_by: user?.id,
                 score: 100, // Mark as 100% since it's bypassed

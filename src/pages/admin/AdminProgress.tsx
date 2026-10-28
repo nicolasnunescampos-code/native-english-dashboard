@@ -73,6 +73,12 @@ const AdminProgress: React.FC = () => {
 
             if (classesError) throw classesError;
 
+            // 2b. Fetch ALL completed/bypassed exam submissions
+            const { data: submissions } = await supabase
+                .from('exam_submissions')
+                .select('student_id, completed_at, score, answers_json, exam_id')
+                .not('completed_at', 'is', null);
+
             // 3. Process each student
             const stats: StudentProgress[] = (students || []).map(student => {
                 const studentClasses = (classes || []).filter(c =>
@@ -81,6 +87,7 @@ const AdminProgress: React.FC = () => {
                 
                 const activeClasses = studentClasses.filter(c => c.class_type === activeType && c.class_chapter !== null);
                 const examClasses = studentClasses.filter(c => c.class_type === 'Exam');
+                const studentSubs = (submissions || []).filter(s => s.student_id === student.id);
 
                 if (activeClasses.length === 0) {
                     return {
@@ -114,18 +121,31 @@ const AdminProgress: React.FC = () => {
                 let needsExam = false;
                 if (activeType === 'Grammar' && (lastClass.class_chapter === '5' || lastClass.class_chapter === '10')) {
                     const grammarDate = new Date(`${lastClass.date}T${lastClass.time || '00:00'}`);
-                    const lastExam = examClasses.sort((a, b) => {
-                        const dateA = new Date(`${a.date}T${a.time || '00:00'}`);
-                        const dateB = new Date(`${b.date}T${b.time || '00:00'}`);
-                        return dateB.getTime() - dateA.getTime();
-                    })[0];
-                    
-                    if (!lastExam) {
-                        needsExam = true;
-                    } else {
-                        const examDate = new Date(`${lastExam.date}T${lastExam.time || '00:00'}`);
-                        if (examDate < grammarDate) {
+                    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+                    const hasSub = studentSubs.some(s => {
+                        if (!s.completed_at) return false;
+                        if (s.answers_json && (s.answers_json.bypassed || s.answers_json.notes?.toLowerCase().includes('bypassed') || s.answers_json.notes?.toLowerCase().includes('canceled') || s.answers_json.notes?.toLowerCase().includes('cancelled'))) {
+                            return true;
+                        }
+                        const subTime = new Date(s.completed_at).getTime();
+                        return !isNaN(subTime) && subTime >= grammarDate.getTime() - ONE_DAY_MS;
+                    });
+
+                    if (!hasSub) {
+                        const lastExam = examClasses.sort((a, b) => {
+                            const dateA = new Date(`${a.date}T${a.time || '00:00'}`);
+                            const dateB = new Date(`${b.date}T${b.time || '00:00'}`);
+                            return dateB.getTime() - dateA.getTime();
+                        })[0];
+                        
+                        if (!lastExam) {
                             needsExam = true;
+                        } else {
+                            const examDate = new Date(`${lastExam.date}T${lastExam.time || '00:00'}`);
+                            if (examDate < grammarDate) {
+                                needsExam = true;
+                            }
                         }
                     }
                 }

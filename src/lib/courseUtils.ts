@@ -35,10 +35,11 @@ export function getNextLevel(currentLevel: string): string {
 export async function fetchStudentNextChapters(
   studentName: string
 ): Promise<Partial<Record<ClassType, NextChapterInfo>>> {
+  const cleanName = studentName?.trim() || "";
   const { data: history } = await supabase
     .from("classes")
     .select("class_type, class_chapter, class_level, date, time")
-    .eq("student_name", studentName)
+    .or(`student_name.ilike.%${cleanName}%,student_name.eq.${cleanName}`)
     .not("class_grade", "is", null);
 
   const nextChapters: Partial<Record<ClassType, NextChapterInfo>> = {};
@@ -53,7 +54,7 @@ export async function fetchStudentNextChapters(
           h.class_chapter !== "N/A"
       )
       .sort((a, b) =>
-        `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`)
+        `${b.date} ${b.time || ''}`.localeCompare(`${a.date} ${a.time || ''}`)
       )[0];
 
     if (!last) continue;
@@ -83,14 +84,33 @@ import { startOfWeek, endOfWeek } from 'date-fns';
 export async function fetchUpcomingClassType(studentName: string): Promise<ClassType> {
   if (!studentName) return 'Grammar';
 
-  // First check what course type the student makes
+  const cleanName = studentName.trim();
+
+  // First check what course type the student makes and find student ID
+  let studentId: string | null = null;
+  let courseType = 'Native English';
+
   const { data: student } = await supabase
     .from('students')
-    .select('course_type')
-    .eq('student_name', studentName)
+    .select('id, course_type')
+    .ilike('student_name', cleanName)
     .maybeSingle();
 
-  const courseType = student?.course_type || 'Native English';
+  if (student) {
+    studentId = student.id;
+    courseType = student.course_type || 'Native English';
+  } else {
+    const { data: fallbackStudent } = await supabase
+      .from('students')
+      .select('id, course_type')
+      .or(`student_name.ilike.%${cleanName}%,student_name.eq.${cleanName}`)
+      .limit(1)
+      .maybeSingle();
+    if (fallbackStudent) {
+      studentId = fallbackStudent.id;
+      courseType = fallbackStudent.course_type || 'Native English';
+    }
+  }
 
   if (courseType === 'Conversation Club') {
     return 'Club';
@@ -103,8 +123,8 @@ export async function fetchUpcomingClassType(studentName: string): Promise<Class
 
   const { data: classes } = await supabase
     .from("classes")
-    .select("class_type, class_chapter, date, time")
-    .eq("student_name", studentName)
+    .select("class_type, class_chapter, class_level, date, time")
+    .or(`student_name.ilike.%${cleanName}%,student_name.eq.${cleanName}`)
     .not("class_grade", "is", null);
 
   if (!classes || classes.length === 0) {
@@ -115,30 +135,82 @@ export async function fetchUpcomingClassType(studentName: string): Promise<Class
   const grammarClasses = classes.filter(c => c.class_type === 'Grammar');
   const examClasses = classes.filter(c => c.class_type === 'Exam');
   
-  grammarClasses.sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
-  examClasses.sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
+  grammarClasses.sort((a, b) => `${b.date} ${b.time || ''}`.localeCompare(`${a.date} ${a.time || ''}`));
+  examClasses.sort((a, b) => `${b.date} ${b.time || ''}`.localeCompare(`${a.date} ${a.time || ''}`));
   
   const lastGrammar = grammarClasses[0];
   const lastExam = examClasses[0];
 
   if (lastGrammar) {
     if (lastGrammar.class_chapter === '5' || lastGrammar.class_chapter === '10') {
-      const grammarDateTime = `${lastGrammar.date} ${lastGrammar.time}`;
-      const examDateTime = lastExam ? `${lastExam.date} ${lastExam.time}` : '';
-      
-      // Also check if there's a completed online exam submission AFTER grammarDateTime
-      const { data: submissions } = await supabase
-        .from('exam_submissions')
-        .select('completed_at, students!inner(student_name)')
-        .eq('students.student_name', studentName)
-        .not('completed_at', 'is', null);
+      const cleanTime = (lastGrammar.time || '00:00').trim();
+      const timePart = cleanTime.length === 5 ? `${cleanTime}:00` : cleanTime;
+      const grammarDateTimeMs = new Date(`${lastGrammar.date}T${timePart}`).getTime();
 
-      const hasCompletedSubmission = submissions?.some(sub => {
-          return sub.completed_at && new Date(sub.completed_at).getTime() >= new Date(grammarDateTime).getTime();
-      });
-      
-      // If there is no exam class AND no completed online exam AFTER the grammar class 5 or 10, next MUST be Exam
-      if (!hasCompletedSubmission && (!lastExam || examDateTime < grammarDateTime)) {
+      let examDateTimeMs = 0;
+      if (lastExam) {
+        const examCleanTime = (lastExam.time || '00:00').trim();
+        const examTimePart = examCleanTime.length === 5 ? `${examCleanTime}:00` : examCleanTime;
+        examDateTimeMs = new Date(`${lastExam.date}T${examTimePart}`).getTime();
+      }
+
+      // Check if there is a completed or bypassed online exam submission
+      let hasCompletedSubmission = false;
+
+      if (studentId) {
+        const { data: submissions, error: subError } = await supabase
+          .from('exam_submissions')
+          .select('id, exam_id, completed_at, score, answers_json, exams(id, chapter_number, level)')
+          .eq('student_id', studentId)
+          .not('completed_at', 'is', null);
+
+        if (subError) {
+          console.error('Error fetching exam submissions in fetchUpcomingClassType:', subError);
+        }
+
+        if (submissions && submissions.length > 0) {
+          const targetExamChapterNumber = lastGrammar.class_chapter === '5' ? 1 : 2;
+          const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+          hasCompletedSubmission = submissions.some(sub => {
+            if (!sub.completed_at) return false;
+
+            // 1. Explicit milestone match (Exam 1 for Ch 5, Exam 2 for Ch 10)
+            const examObj = (sub as any).exams;
+            if (examObj?.chapter_number === targetExamChapterNumber) {
+              if (!examObj.level || !lastGrammar.class_level || examObj.level.toLowerCase() === lastGrammar.class_level.toLowerCase()) {
+                return true;
+              }
+            }
+
+            // 2. Bypassed / Canceled by teacher flag
+            const answers = sub.answers_json;
+            if (answers && typeof answers === 'object') {
+              if (answers.bypassed === true) return true;
+              const notes = String(answers.notes || '').toLowerCase();
+              if (notes.includes('bypassed') || notes.includes('canceled') || notes.includes('cancelled')) {
+                return true;
+              }
+            }
+
+            // 3. Completed on or after grammar class date (with 24h timezone margin)
+            const subTimeMs = new Date(sub.completed_at).getTime();
+            if (!isNaN(subTimeMs) && !isNaN(grammarDateTimeMs)) {
+              if (subTimeMs >= grammarDateTimeMs - ONE_DAY_MS) {
+                return true;
+              }
+            } else if (!isNaN(subTimeMs) && sub.completed_at.slice(0, 10) >= lastGrammar.date) {
+              return true;
+            }
+
+            return false;
+          });
+        }
+      }
+
+      // If there is no in-person exam class AND no completed/bypassed online exam after chapter 5 or 10, next MUST be Exam
+      const hasValidExamClass = lastExam && examDateTimeMs >= grammarDateTimeMs;
+      if (!hasCompletedSubmission && !hasValidExamClass) {
         return 'Exam';
       }
     }
