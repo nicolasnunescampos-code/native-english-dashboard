@@ -1,10 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import {
   Play,
   ChevronLeft,
-  ChevronUp,
-  ChevronDown,
   Star,
   Users,
   Sparkles,
@@ -75,42 +73,42 @@ const getThumbnailSrc = (url: string, videoUrl?: string) => {
 const PLACEHOLDER_MODULES = [
   {
     id: -1,
-    badge: 'MODULE 1',
+    badge: 'LESSON 1',
     title: 'Foundations & Essential Structures',
     level: 'Beginner',
     description: 'Core sentence patterns, everyday greetings, and essential pronunciation.',
   },
   {
     id: -2,
-    badge: 'MODULE 2',
+    badge: 'LESSON 2',
     title: 'Everyday Conversations & Listening',
     level: 'Beginner',
     description: 'Real-world dialogues, active listening strategies, and natural phrasing.',
   },
   {
     id: -3,
-    badge: 'MODULE 3',
+    badge: 'LESSON 1',
     title: 'Connecting Ideas & Past Tenses',
     level: 'Intermediate',
     description: 'Storytelling, past experiences, and linking thoughts smoothly in English.',
   },
   {
     id: -4,
-    badge: 'MODULE 4',
+    badge: 'LESSON 2',
     title: 'Intermediate Fluency & Idioms',
     level: 'Intermediate',
     description: 'Phrasal verbs, native expressions, and confident daily communication.',
   },
   {
     id: -5,
-    badge: 'MODULE 5',
+    badge: 'LESSON 1',
     title: 'Advanced Nuance & Debate',
     level: 'Advanced',
     description: 'Complex grammar structures, persuasive speaking, and native speed.',
   },
   {
     id: -6,
-    badge: 'MODULE 6',
+    badge: 'LESSON 2',
     title: 'Mastery & Professional English',
     level: 'Advanced',
     description: 'Executive communication, cultural idioms, and complete fluency.',
@@ -126,7 +124,7 @@ const VideoCard = ({
   index: number;
   badgeOverride?: string;
 }) => {
-  const moduleLabel = badgeOverride || `MODULE ${index + 1}`;
+  const badgeLabel = badgeOverride || `LESSON ${index + 1}`;
 
   return (
     <Dialog>
@@ -146,10 +144,13 @@ const VideoCard = ({
           <div className="absolute inset-0 bg-gradient-to-t from-[#030917] via-[#061531]/45 to-[#061531]/20 mix-blend-multiply" />
           <div className="absolute inset-0 bg-gradient-to-t from-[#020712] via-[#040d21]/60 to-transparent" />
 
-          {/* Top-left MODULE badge */}
+          {/* Top-left Badge */}
           <div className="absolute top-3.5 left-3.5 z-10">
-            <span className="inline-block px-2.5 py-1 rounded-[4px] text-[11px] font-extrabold uppercase tracking-wider bg-sky-500/90 text-white shadow-[0_0_15px_rgba(14,165,233,0.65)] backdrop-blur-sm border border-sky-300/40">
-              {moduleLabel}
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] text-[11px] font-extrabold uppercase tracking-wider bg-sky-500/90 text-white shadow-[0_0_15px_rgba(14,165,233,0.65)] backdrop-blur-sm border border-sky-300/40">
+              {badgeOverride === 'LIVE CLASS' && (
+                <Radio className="w-3 h-3 text-sky-200 animate-pulse" />
+              )}
+              <span>{badgeLabel}</span>
             </span>
           </div>
 
@@ -198,13 +199,14 @@ const VideoCard = ({
 const StudentVideoCourse: React.FC = () => {
   const { studentName, teacherName, role } = useAuth();
   const navigate = useNavigate();
-  const liveClassesRef = useRef<HTMLDivElement | null>(null);
 
   const [courseVideos, setCourseVideos] = useState<Video[]>([]);
   const [liveClassVideos, setLiveClassVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAllSections, setShowAllSections] = useState(true);
-  const [activeLevel, setActiveLevel] = useState<string>('All');
+  const [selectedModule, setSelectedModule] = useState<
+    'all' | 'video_course' | 'live_classes'
+  >('all');
+  const [selectedLevel, setSelectedLevel] = useState<string>('All');
   const [userRating, setUserRating] = useState<number>(5);
 
   const displayName =
@@ -261,22 +263,10 @@ const StudentVideoCourse: React.FC = () => {
 
   const totalLessonsCount = courseVideos.length + liveClassVideos.length;
 
-  const filteredCourseVideos =
-    activeLevel === 'All'
-      ? courseVideos
-      : activeLevel === 'Live Classes'
-        ? []
-        : courseVideos.filter((v) => v.level === activeLevel);
-
-  const filteredLiveClassVideos =
-    activeLevel === 'All' || activeLevel === 'Live Classes'
-      ? liveClassVideos
-      : liveClassVideos.filter((v) => v.level === activeLevel);
-
   const liveClassesByLevel = {
-    Beginner: filteredLiveClassVideos.filter((v) => v.level === 'Beginner'),
-    Intermediate: filteredLiveClassVideos.filter((v) => v.level === 'Intermediate'),
-    Advanced: filteredLiveClassVideos.filter((v) => v.level === 'Advanced'),
+    Beginner: liveClassVideos.filter((v) => v.level === 'Beginner'),
+    Intermediate: liveClassVideos.filter((v) => v.level === 'Intermediate'),
+    Advanced: liveClassVideos.filter((v) => v.level === 'Advanced'),
   };
 
   const courseVideosByLevel = {
@@ -285,26 +275,9 @@ const StudentVideoCourse: React.FC = () => {
     Advanced: courseVideos.filter((v) => v.level === 'Advanced'),
   };
 
-  const firstVideo =
-    filteredCourseVideos[0] ||
-    filteredLiveClassVideos[0] ||
-    courseVideos[0] ||
-    liveClassVideos[0] ||
-    null;
+  const firstVideo = courseVideos[0] || liveClassVideos[0] || null;
 
   const heroBgUrl = `${import.meta.env.BASE_URL}video-course-hero.jpg`;
-  const liveClassesModuleCover =
-    liveClassVideos[0]
-      ? getThumbnailSrc(liveClassVideos[0].thumbnail_url, liveClassVideos[0].youtube_url)
-      : heroBgUrl;
-
-  const handleSelectLiveClassesModule = () => {
-    setActiveLevel('Live Classes');
-    setShowAllSections(true);
-    setTimeout(() => {
-      liveClassesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 80);
-  };
 
   if (loading) {
     return (
@@ -318,11 +291,11 @@ const StudentVideoCourse: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#040a18] text-white pb-16 overflow-x-hidden">
+    <div className="min-h-screen w-full bg-[#040a18] text-white pb-20 overflow-x-hidden">
       {/* ======================================================== */}
       {/* IMMERSIVE DARK-BLUE HERO SECTION                         */}
       {/* ======================================================== */}
-      <div className="relative min-h-[560px] lg:min-h-[620px] w-full flex flex-col justify-between overflow-hidden">
+      <div className="relative min-h-[540px] lg:min-h-[600px] w-full flex flex-col justify-between overflow-hidden">
         {/* Background Artwork */}
         <div
           className="absolute inset-0 bg-cover bg-center bg-no-repeat transform scale-105 transition-transform duration-1000"
@@ -356,7 +329,8 @@ const StudentVideoCourse: React.FC = () => {
             </div>
             <div className="text-left hidden sm:block pr-1">
               <p className="text-[10px] font-medium text-sky-300/75 uppercase tracking-wider">
-                {totalLessonsCount} Recorded {totalLessonsCount === 1 ? 'Lesson' : 'Lessons'}
+                {totalLessonsCount} Recorded{' '}
+                {totalLessonsCount === 1 ? 'Lesson' : 'Lessons'}
               </p>
               <p className="text-xs font-extrabold text-white truncate max-w-[140px]">
                 {displayName}
@@ -390,7 +364,9 @@ const StudentVideoCourse: React.FC = () => {
                     type="button"
                     onClick={() => {
                       setUserRating(star);
-                      toast.success(`Thank you for rating the course ${star}.0 stars!`);
+                      toast.success(
+                        `Thank you for rating the course ${star}.0 stars!`
+                      );
                     }}
                     className="focus:outline-none hover:scale-110 transition-transform"
                     title={`Rate ${star} stars`}
@@ -414,7 +390,9 @@ const StudentVideoCourse: React.FC = () => {
               <button
                 type="button"
                 onClick={() =>
-                  toast.success('Thanks for your feedback on the Native English Video Course!')
+                  toast.success(
+                    'Thanks for your feedback on the Native English Video Course!'
+                  )
                 }
                 className="inline-flex items-center gap-1.5 hover:text-sky-300 transition-colors underline-offset-4 hover:underline"
               >
@@ -438,8 +416,8 @@ const StudentVideoCourse: React.FC = () => {
               Native English Video Course
             </h1>
             <p className="text-sm sm:text-base text-slate-300/90 max-w-xl leading-relaxed">
-              Learn in practice how to master real-world English grammar, listening,
-              live classes, and native conversation skills at your own pace.
+              Master real-world English through structured video lessons, level
+              by level, plus our complete archive of live class recordings.
             </p>
           </div>
 
@@ -500,10 +478,10 @@ const StudentVideoCourse: React.FC = () => {
                   </div>
                   <div className="min-w-0">
                     <p className="font-extrabold text-sm sm:text-base text-white truncate">
-                      Module 1 - Introduction
+                      Module 1 - Video Course
                     </p>
                     <p className="text-xs text-slate-300/80 truncate">
-                      Lesson 1 - Introduction to the Native English Course
+                      Lesson 1 - Foundations & Introduction
                     </p>
                   </div>
                 </div>
@@ -512,216 +490,275 @@ const StudentVideoCourse: React.FC = () => {
           </div>
         </div>
 
-        {/* BOTTOM BAR OF HERO: "View all sections" + Module/Level Filter Pills */}
-        <div className="relative z-20 px-6 sm:px-10 lg:px-14 pb-4 flex flex-wrap items-center justify-between gap-4">
-          <button
-            type="button"
-            onClick={() => setShowAllSections((prev) => !prev)}
-            className="inline-flex items-center gap-2 text-sm sm:text-base font-bold text-white hover:text-sky-300 transition-colors"
-          >
-            {showAllSections ? (
-              <ChevronUp className="w-4 h-4 text-sky-400" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-sky-400" />
-            )}
-            <span>View all sections</span>
-          </button>
-
+        {/* ======================================================== */}
+        {/* HERO BOTTOM BAR: CLEAN MODULE & LEVEL CONTROLS           */}
+        {/* ======================================================== */}
+        <div className="relative z-20 px-6 sm:px-10 lg:px-14 pb-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-t border-sky-500/15 pt-4 bg-[#040a18]/70 backdrop-blur-md">
+          {/* Module Selector */}
           <div className="flex items-center gap-2 flex-wrap">
-            {['All', 'Live Classes', 'Beginner', 'Intermediate', 'Advanced'].map(
-              (lvl) => (
-                <button
-                  key={lvl}
-                  type="button"
-                  onClick={() => setActiveLevel(lvl)}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 ${
-                    activeLevel === lvl
-                      ? 'bg-sky-500 text-white shadow-[0_0_15px_rgba(14,165,233,0.6)]'
-                      : 'bg-[#08152f]/80 text-slate-300 hover:text-white border border-sky-400/25'
-                  }`}
-                >
-                  {lvl === 'Live Classes' && (
-                    <Radio className="w-3.5 h-3.5 text-sky-200" />
-                  )}
-                  <span>{lvl === 'All' ? 'All Modules' : lvl}</span>
-                </button>
-              )
-            )}
+            <button
+              type="button"
+              onClick={() => setSelectedModule('all')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                selectedModule === 'all'
+                  ? 'bg-sky-500 text-white shadow-[0_0_15px_rgba(14,165,233,0.6)]'
+                  : 'bg-[#08152f]/80 text-slate-300 hover:text-white border border-sky-400/25 hover:border-sky-400/50'
+              }`}
+            >
+              <span>All Modules</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedModule('video_course')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${
+                selectedModule === 'video_course'
+                  ? 'bg-sky-500 text-white shadow-[0_0_15px_rgba(14,165,233,0.6)]'
+                  : 'bg-[#08152f]/80 text-slate-300 hover:text-white border border-sky-400/25 hover:border-sky-400/50'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5 text-sky-200" />
+              <span>Module 1: Video Course</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-black/35 text-sky-300 border border-sky-400/20">
+                {courseVideos.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedModule('live_classes')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${
+                selectedModule === 'live_classes'
+                  ? 'bg-sky-500 text-white shadow-[0_0_15px_rgba(14,165,233,0.6)]'
+                  : 'bg-[#08152f]/80 text-slate-300 hover:text-white border border-sky-400/25 hover:border-sky-400/50'
+              }`}
+            >
+              <Radio className="w-3.5 h-3.5 text-sky-200" />
+              <span>Module 2: Live Classes</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-black/35 text-sky-300 border border-sky-400/20">
+                {liveClassVideos.length}
+              </span>
+            </button>
+          </div>
+
+          {/* Level Selector */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs text-slate-400 mr-1 font-semibold hidden sm:inline">
+              Level:
+            </span>
+            {['All', 'Beginner', 'Intermediate', 'Advanced'].map((lvl) => (
+              <button
+                key={lvl}
+                type="button"
+                onClick={() => setSelectedLevel(lvl)}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                  selectedLevel === lvl
+                    ? 'bg-sky-400 text-[#040a18] shadow-[0_0_12px_rgba(56,189,248,0.7)]'
+                    : 'bg-[#08152f]/70 text-slate-300 hover:text-white border border-sky-400/20'
+                }`}
+              >
+                {lvl === 'All' ? 'All Levels' : lvl}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
       {/* ======================================================== */}
-      {/* MODULE CARDS CAROUSEL & COURSE SECTIONS                  */}
+      {/* MAIN MODULE SECTIONS                                     */}
       {/* ======================================================== */}
-      <div className="relative z-20 px-6 sm:px-10 lg:px-14 pt-2 space-y-12">
-        {/* TOP MODULE STRIP: Includes the "Live Classes" Module Card + Course Modules */}
-        <div className="space-y-3">
-          <ScrollArea className="w-full whitespace-nowrap rounded-xl">
-            <div className="flex w-max space-x-5 py-3">
-              {/* LIVE CLASSES MODULE CARD */}
-              <div
-                onClick={handleSelectLiveClassesModule}
-                className={`group relative w-[240px] sm:w-[255px] h-[330px] rounded-xl overflow-hidden cursor-pointer bg-[#07142b] border transition-all duration-300 hover:scale-[1.04] hover:z-30 shrink-0 ${
-                  activeLevel === 'Live Classes'
-                    ? 'border-sky-400 shadow-[0_12px_35px_-5px_rgba(14,165,233,0.6)] ring-2 ring-sky-400/50'
-                    : 'border-sky-400/35 hover:border-sky-400/80 hover:shadow-[0_12px_35px_-5px_rgba(14,165,233,0.45)]'
-                }`}
-              >
-                <img
-                  src={liveClassesModuleCover}
-                  alt="Live Classes Module"
-                  className="w-full h-full object-cover opacity-75 group-hover:opacity-95 group-hover:scale-105 transition-all duration-500"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = heroBgUrl;
-                  }}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#030917] via-[#061531]/45 to-[#061531]/20 mix-blend-multiply" />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#020712] via-[#040d21]/65 to-transparent" />
-
-                {/* Top-left MODULE badge */}
-                <div className="absolute top-3.5 left-3.5 z-10">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] text-[11px] font-extrabold uppercase tracking-wider bg-sky-500 text-white shadow-[0_0_15px_rgba(14,165,233,0.75)] backdrop-blur-sm border border-sky-300/50">
-                    <Radio className="w-3 h-3 animate-pulse" />
-                    <span>LIVE CLASSES</span>
-                  </span>
-                </div>
-
-                {/* Count Pill Top-Right */}
-                <div className="absolute top-3.5 right-3.5 z-10">
-                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#07152e]/85 text-sky-300 border border-sky-400/35 backdrop-blur-md">
-                    {liveClassVideos.length}{' '}
-                    {liveClassVideos.length === 1 ? 'Class' : 'Classes'}
-                  </span>
-                </div>
-
-                {/* Center Play Icon */}
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-[#030917]/40 backdrop-blur-[2px]">
-                  <div className="w-14 h-14 rounded-full bg-sky-500/90 border border-sky-300/60 flex items-center justify-center shadow-[0_0_25px_rgba(14,165,233,0.8)] transform scale-90 group-hover:scale-105 transition-transform">
-                    <Play className="h-6 w-6 text-white fill-current ml-0.5" />
-                  </div>
-                </div>
-
-                {/* Bottom Info */}
-                <div className="absolute bottom-0 left-0 right-0 p-4 z-10">
-                  <h3 className="font-bold text-base text-white mb-1 whitespace-normal leading-snug group-hover:text-sky-200 transition-colors">
-                    Live Classes
-                  </h3>
-                  <p className="text-xs text-slate-300/85 line-clamp-2 whitespace-normal leading-relaxed">
-                    Full library of recorded live classes across Beginner,
-                    Intermediate, and Advanced levels.
-                  </p>
-                </div>
-              </div>
-
-              {/* RECORDED COURSE VIDEOS OR PLACEHOLDER MODULES */}
-              {courseVideos.length > 0
-                ? filteredCourseVideos.map((video, idx) => (
-                    <VideoCard key={video.id} video={video} index={idx} />
-                  ))
-                : activeLevel !== 'Live Classes' &&
-                  PLACEHOLDER_MODULES.filter(
-                    (m) => activeLevel === 'All' || m.level === activeLevel
-                  ).map((mod) => (
-                    <div
-                      key={mod.id}
-                      onClick={() =>
-                        toast.info(
-                          `${mod.badge}: "${mod.title}" will be unlocked as soon as recorded lessons are posted.`
-                        )
-                      }
-                      className="group relative w-[240px] sm:w-[255px] h-[330px] rounded-xl overflow-hidden cursor-pointer bg-[#07142b] border border-sky-400/20 transition-all duration-300 hover:scale-[1.03] hover:border-sky-400/60 hover:shadow-[0_12px_35px_-5px_rgba(14,165,233,0.4)] shrink-0"
-                    >
-                      <img
-                        src={heroBgUrl}
-                        alt={mod.title}
-                        className="w-full h-full object-cover object-right opacity-55 group-hover:opacity-75 group-hover:scale-105 transition-all duration-500"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#020712] via-[#061531]/65 to-[#061531]/30" />
-
-                      {/* Top-left MODULE badge */}
-                      <div className="absolute top-3.5 left-3.5 z-10">
-                        <span className="inline-block px-2.5 py-1 rounded-[4px] text-[11px] font-extrabold uppercase tracking-wider bg-sky-500/90 text-white shadow-[0_0_15px_rgba(14,165,233,0.65)]">
-                          {mod.badge}
-                        </span>
-                      </div>
-
-                      {/* Top-right Level badge */}
-                      <div className="absolute top-3.5 right-3.5 z-10">
-                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#07152e]/85 text-sky-300 border border-sky-400/30">
-                          {mod.level}
-                        </span>
-                      </div>
-
-                      {/* Bottom Info */}
-                      <div className="absolute bottom-0 left-0 right-0 p-4 z-10">
-                        <h3 className="font-bold text-base text-white mb-1 whitespace-normal leading-snug group-hover:text-sky-200 transition-colors">
-                          {mod.title}
-                        </h3>
-                        <p className="text-xs text-slate-300/80 line-clamp-2 whitespace-normal leading-relaxed">
-                          {mod.description}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-            </div>
-            <ScrollBar orientation="horizontal" className="bg-sky-950/50" />
-          </ScrollArea>
-        </div>
-
+      <div className="relative z-20 px-6 sm:px-10 lg:px-14 pt-10 space-y-16">
         {/* ======================================================== */}
-        {/* LIVE CLASSES MODULE SECTION                              */}
+        {/* MODULE 1: VIDEO COURSE (THEN THE LEVELS)                  */}
         {/* ======================================================== */}
-        {(showAllSections || activeLevel === 'Live Classes') && (
-          <div
-            ref={liveClassesRef}
-            className="space-y-8 pt-6 border-t border-sky-500/15"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-sky-500/15 border border-sky-400/30 text-sky-300 text-[11px] font-bold uppercase tracking-wider">
-                  <Radio className="w-3 h-3 text-sky-400" />
-                  <span>Course Module</span>
+        {(selectedModule === 'all' || selectedModule === 'video_course') && (
+          <div className="space-y-8">
+            {/* Module 1 Banner */}
+            <div className="p-6 rounded-2xl bg-gradient-to-r from-[#071738]/90 via-[#0a1e4a]/60 to-[#07142b]/40 border border-sky-400/30 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.35)]">
+              <div className="space-y-1.5">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/20 border border-sky-400/40 text-sky-300 text-xs font-extrabold uppercase tracking-wider">
+                  <BookOpen className="w-3.5 h-3.5 text-sky-300" />
+                  <span>Module 1</span>
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-extrabold text-white flex items-center gap-3">
-                  <span>Live Classes</span>
-                  <span className="text-xs font-semibold text-sky-300/80 bg-sky-500/15 border border-sky-400/25 px-3 py-1 rounded-full">
-                    {filteredLiveClassVideos.length}{' '}
-                    {filteredLiveClassVideos.length === 1 ? 'lesson' : 'lessons'}
+                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-3">
+                  <span>Video Course</span>
+                  <span className="text-xs font-bold text-sky-300 bg-sky-500/15 border border-sky-400/30 px-3 py-1 rounded-full">
+                    {courseVideos.length}{' '}
+                    {courseVideos.length === 1 ? 'lesson' : 'lessons'}
                   </span>
                 </h2>
+                <p className="text-sm text-slate-300/85 max-w-2xl">
+                  Self-paced recorded lessons covering grammar, pronunciation,
+                  vocabulary, and natural speaking skills organized by level.
+                </p>
               </div>
-
-              {activeLevel === 'Live Classes' && (
-                <button
-                  type="button"
-                  onClick={() => setActiveLevel('All')}
-                  className="text-xs font-bold uppercase tracking-wider text-sky-300 hover:text-white border border-sky-400/30 rounded-full px-3.5 py-1.5 bg-[#08152f]/80 transition-colors"
-                >
-                  Show All Modules
-                </button>
-              )}
             </div>
 
-            {filteredLiveClassVideos.length === 0 ? (
+            {/* Levels inside Module 1 */}
+            <div className="space-y-10 pl-1 sm:pl-2">
+              {(['Beginner', 'Intermediate', 'Advanced'] as const).map(
+                (lvl) => {
+                  if (selectedLevel !== 'All' && selectedLevel !== lvl)
+                    return null;
+                  const levelVideos = courseVideosByLevel[lvl];
+                  const placeholderList = PLACEHOLDER_MODULES.filter(
+                    (m) => m.level === lvl
+                  );
+
+                  return (
+                    <div key={`course-${lvl}`} className="space-y-3.5">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2.5">
+                          <span className="w-2 h-5 rounded-full bg-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.8)]" />
+                          <span>{lvl} Level</span>
+                          <span className="text-xs font-semibold text-sky-300/70 bg-sky-500/10 border border-sky-400/20 px-2.5 py-0.5 rounded-full">
+                            {courseVideos.length > 0
+                              ? levelVideos.length
+                              : placeholderList.length}{' '}
+                            {(courseVideos.length > 0
+                              ? levelVideos.length
+                              : placeholderList.length) === 1
+                              ? 'lesson'
+                              : 'lessons'}
+                          </span>
+                        </h3>
+                      </div>
+
+                      {courseVideos.length > 0 ? (
+                        levelVideos.length > 0 ? (
+                          <ScrollArea className="w-full whitespace-nowrap rounded-xl">
+                            <div className="flex w-max space-x-5 py-3">
+                              {levelVideos.map((video, idx) => (
+                                <VideoCard
+                                  key={video.id}
+                                  video={video}
+                                  index={idx}
+                                  badgeOverride={`LESSON ${idx + 1}`}
+                                />
+                              ))}
+                            </div>
+                            <ScrollBar
+                              orientation="horizontal"
+                              className="bg-sky-950/50"
+                            />
+                          </ScrollArea>
+                        ) : (
+                          <div className="rounded-xl bg-[#07142b]/40 border border-sky-400/15 p-6 text-slate-400 text-sm">
+                            No recorded lessons for {lvl} level yet. New lessons
+                            will be published here soon.
+                          </div>
+                        )
+                      ) : (
+                        /* Placeholders shown when no course videos exist yet */
+                        <ScrollArea className="w-full whitespace-nowrap rounded-xl">
+                          <div className="flex w-max space-x-5 py-3">
+                            {placeholderList.map((mod) => (
+                              <div
+                                key={mod.id}
+                                onClick={() =>
+                                  toast.info(
+                                    `${mod.badge}: "${mod.title}" will be unlocked as soon as recorded lessons are posted.`
+                                  )
+                                }
+                                className="group relative w-[240px] sm:w-[255px] h-[330px] rounded-xl overflow-hidden cursor-pointer bg-[#07142b] border border-sky-400/20 transition-all duration-300 hover:scale-[1.03] hover:border-sky-400/60 hover:shadow-[0_12px_35px_-5px_rgba(14,165,233,0.4)] shrink-0"
+                              >
+                                <img
+                                  src={heroBgUrl}
+                                  alt={mod.title}
+                                  className="w-full h-full object-cover object-right opacity-55 group-hover:opacity-75 group-hover:scale-105 transition-all duration-500"
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-[#020712] via-[#061531]/65 to-[#061531]/30" />
+
+                                <div className="absolute top-3.5 left-3.5 z-10">
+                                  <span className="inline-block px-2.5 py-1 rounded-[4px] text-[11px] font-extrabold uppercase tracking-wider bg-sky-500/90 text-white shadow-[0_0_15px_rgba(14,165,233,0.65)]">
+                                    {mod.badge}
+                                  </span>
+                                </div>
+
+                                <div className="absolute top-3.5 right-3.5 z-10">
+                                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#07152e]/85 text-sky-300 border border-sky-400/30">
+                                    {mod.level}
+                                  </span>
+                                </div>
+
+                                <div className="absolute bottom-0 left-0 right-0 p-4 z-10">
+                                  <h3 className="font-bold text-base text-white mb-1 whitespace-normal leading-snug group-hover:text-sky-200 transition-colors">
+                                    {mod.title}
+                                  </h3>
+                                  <p className="text-xs text-slate-300/80 line-clamp-2 whitespace-normal leading-relaxed">
+                                    {mod.description}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <ScrollBar
+                            orientation="horizontal"
+                            className="bg-sky-950/50"
+                          />
+                        </ScrollArea>
+                      )}
+                    </div>
+                  );
+                }
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* MODULE 2: LIVE CLASSES (THEN THE LEVELS)                  */}
+        {/* ======================================================== */}
+        {(selectedModule === 'all' || selectedModule === 'live_classes') && (
+          <div
+            className={`space-y-8 ${
+              selectedModule === 'all' ? 'pt-8 border-t border-sky-500/15' : ''
+            }`}
+          >
+            {/* Module 2 Banner */}
+            <div className="p-6 rounded-2xl bg-gradient-to-r from-[#0b1736]/90 via-[#131e42]/60 to-[#07142b]/40 border border-sky-400/30 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.35)]">
+              <div className="space-y-1.5">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/20 border border-sky-400/40 text-sky-300 text-xs font-extrabold uppercase tracking-wider">
+                  <Radio className="w-3.5 h-3.5 text-sky-300 animate-pulse" />
+                  <span>Module 2</span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-3">
+                  <span>Live Classes</span>
+                  <span className="text-xs font-bold text-sky-300 bg-sky-500/15 border border-sky-400/30 px-3 py-1 rounded-full">
+                    {liveClassVideos.length}{' '}
+                    {liveClassVideos.length === 1 ? 'class' : 'classes'}
+                  </span>
+                </h2>
+                <p className="text-sm text-slate-300/85 max-w-2xl">
+                  Full library of recorded live interactive group classes with
+                  Native English teachers, organized by proficiency level.
+                </p>
+              </div>
+            </div>
+
+            {/* Levels inside Module 2 */}
+            {liveClassVideos.length === 0 ? (
               <div className="rounded-2xl bg-[#07142b]/60 border border-sky-400/20 p-8 text-center text-slate-300/80">
-                No recorded live classes found for this filter yet.
+                No recorded live classes available yet.
               </div>
             ) : (
-              <div className="space-y-8">
+              <div className="space-y-10 pl-1 sm:pl-2">
                 {(['Beginner', 'Intermediate', 'Advanced'] as const).map(
                   (lvl) => {
+                    if (selectedLevel !== 'All' && selectedLevel !== lvl)
+                      return null;
                     const levelList = liveClassesByLevel[lvl];
                     if (levelList.length === 0) return null;
+
                     return (
-                      <div key={lvl} className="space-y-3">
+                      <div key={`live-${lvl}`} className="space-y-3.5">
                         <div className="flex items-center justify-between">
                           <h3 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2.5">
-                            <span className="w-1.5 h-5 rounded-full bg-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.8)]" />
+                            <span className="w-2 h-5 rounded-full bg-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.8)]" />
                             <span>Live Classes • {lvl} Level</span>
                             <span className="text-xs font-semibold text-sky-300/70 bg-sky-500/10 border border-sky-400/20 px-2.5 py-0.5 rounded-full">
                               {levelList.length}{' '}
-                              {levelList.length === 1 ? 'lesson' : 'lessons'}
+                              {levelList.length === 1 ? 'class' : 'classes'}
                             </span>
                           </h3>
                         </div>
@@ -750,53 +787,6 @@ const StudentVideoCourse: React.FC = () => {
             )}
           </div>
         )}
-
-        {/* ======================================================== */}
-        {/* RECORDED COURSE LEVEL SECTIONS (if courseVideos exist)   */}
-        {/* ======================================================== */}
-        {showAllSections &&
-          activeLevel !== 'Live Classes' &&
-          courseVideos.length > 0 && (
-            <div className="space-y-10 pt-6 border-t border-sky-500/15">
-              {(['Beginner', 'Intermediate', 'Advanced'] as const).map(
-                (lvl) => {
-                  if (activeLevel !== 'All' && activeLevel !== lvl) return null;
-                  const levelList = courseVideosByLevel[lvl];
-                  if (levelList.length === 0) return null;
-                  return (
-                    <div key={lvl} className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2.5">
-                          <span className="w-2 h-6 rounded-full bg-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.8)]" />
-                          <span>Course Modules • {lvl} Level</span>
-                          <span className="text-xs font-semibold text-sky-300/70 bg-sky-500/10 border border-sky-400/20 px-2.5 py-0.5 rounded-full">
-                            {levelList.length}{' '}
-                            {levelList.length === 1 ? 'lesson' : 'lessons'}
-                          </span>
-                        </h2>
-                      </div>
-
-                      <ScrollArea className="w-full whitespace-nowrap rounded-xl">
-                        <div className="flex w-max space-x-5 py-3">
-                          {levelList.map((video, idx) => (
-                            <VideoCard
-                              key={video.id}
-                              video={video}
-                              index={idx}
-                            />
-                          ))}
-                        </div>
-                        <ScrollBar
-                          orientation="horizontal"
-                          className="bg-sky-950/50"
-                        />
-                      </ScrollArea>
-                    </div>
-                  );
-                }
-              )}
-            </div>
-          )}
       </div>
     </div>
   );
