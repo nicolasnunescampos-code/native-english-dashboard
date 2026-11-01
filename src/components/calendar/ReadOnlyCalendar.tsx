@@ -244,13 +244,13 @@ export const ReadOnlyCalendar: React.FC<ReadOnlyCalendarProps> = ({ role, identi
     const { min, max } = React.useMemo(() => {
         if (events.length === 0) {
             return {
-                min: new Date(1970, 1, 1, 8, 0, 0),
-                max: new Date(1970, 1, 1, 20, 0, 0),
+                min: new Date(1970, 1, 1, 5, 0, 0),
+                max: new Date(1970, 1, 1, 23, 0, 0),
             };
         }
 
-        let minHour = 24;
-        let maxHour = 0;
+        let minHour = 5;
+        let maxHour = 22;
 
         events.forEach(evt => {
             const startH = evt.start!.getHours();
@@ -263,14 +263,8 @@ export const ReadOnlyCalendar: React.FC<ReadOnlyCalendarProps> = ({ role, identi
             if (calcEndH > maxHour) maxHour = calcEndH;
         });
 
-        minHour = Math.max(0, minHour - 1);
-        maxHour = Math.min(23, maxHour + 1);
-
-        if (maxHour - minHour < 6) {
-             const pad = Math.floor((6 - (maxHour - minHour)) / 2);
-             minHour = Math.max(0, minHour - pad);
-             maxHour = Math.min(23, maxHour + pad);
-        }
+        minHour = Math.min(5, Math.max(0, minHour - 1));
+        maxHour = Math.max(22, Math.min(23, maxHour + 1));
 
         return {
             min: new Date(1970, 1, 1, minHour, 0, 0),

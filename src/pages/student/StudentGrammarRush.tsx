@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   supabase,
@@ -103,8 +103,20 @@ export default function StudentGrammarRush() {
   useOfflineGrammarSync();
 
   // Screen State: 'lobby' | 'playing' | 'results'
+  const [searchParams] = useSearchParams();
   const [screen, setScreen] = useState<'lobby' | 'playing' | 'results'>('lobby');
   const [activeTab, setActiveTab] = useState<DuolingoTab>('learn');
+
+  // Sync tab with URL search params (e.g. ?tab=leaderboard from "Full Board" link)
+  useEffect(() => {
+    const tabParam = searchParams.get('tab') as DuolingoTab | null;
+    if (
+      tabParam &&
+      ['learn', 'leaderboard', 'practice', 'quests', 'guidebook'].includes(tabParam)
+    ) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
   const [selectedBook, setSelectedBook] = useState<GrammarBookLevel>('Beginner');
   const [selectedChapter, setSelectedChapter] = useState<string>('1');
   const [skillMode, setSkillMode] = useState<'mix' | 'grammar' | 'speaking'>('mix');
@@ -837,7 +849,10 @@ export default function StudentGrammarRush() {
             {/* RIGHT COLUMN (DESKTOP ONLY): Persistent Native English Quest Hub */}
             <div className="hidden lg:flex lg:col-span-4 flex-col gap-5 sticky top-20 pb-20">
               {/* Live Ranking Board (Stays visible right next to the student as they scroll down the map) */}
-              <CompactNativeQuestRankCard showPlayButton={false} />
+              <CompactNativeQuestRankCard
+                showPlayButton={false}
+                onOpenFullBoard={() => setActiveTab('leaderboard')}
+              />
 
               {/* Level Certificate Card */}
               <div className="rounded-3xl p-5 bg-gradient-to-br from-[#2B2F8F] via-[#353AA6] to-[#2B2F8F] text-white shadow-lg space-y-3 border border-[#4FC3E8]/30">

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { format, startOfWeek, endOfWeek } from 'date-fns';
 import { GrammarBookLevel } from '@/lib/supabase';
 import { useGrammarLeaderboard } from '@/hooks/useGrammarRush';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -47,6 +48,7 @@ export const NativeQuestLeaderboardCard: React.FC<NativeQuestLeaderboardCardProp
   title = 'Native Quest Weekly Ranking',
   subtitle = 'Compete with fellow students, build your combo streak, and claim the weekly crown!',
 }) => {
+  const { studentName } = useAuth();
   const [selectedBook, setSelectedBook] = useState<GrammarBookLevel | 'ALL'>(defaultBook);
   const [timeframe, setTimeframe] = useState<'week' | 'all_time'>(defaultTimeframe);
   const [socialModalOpen, setSocialModalOpen] = useState(false);
@@ -71,6 +73,12 @@ export const NativeQuestLeaderboardCard: React.FC<NativeQuestLeaderboardCardProp
   const topTen = leaderboard.slice(0, 10);
   const runnersUp = topTen.slice(3);
   const myEntry = leaderboard.find((e) => e.is_current_user);
+
+  const getDisplayName = (entry?: (typeof leaderboard)[0] | null) => {
+    if (!entry) return '';
+    if (entry.is_current_user && studentName) return studentName;
+    return entry.first_name || 'Student';
+  };
 
   const renderPodium = (isSocialPoster = false) => {
     if (leaderboard.length === 0) return null;
@@ -103,8 +111,11 @@ export const NativeQuestLeaderboardCard: React.FC<NativeQuestLeaderboardCardProp
               <Badge className="bg-slate-400/20 text-slate-200 border-slate-400/40 text-[10px] mb-1">
                 #2 SILVER
               </Badge>
-              <p className="font-bold text-white text-xs sm:text-sm truncate">
-                {second.first_name}
+              <p
+                className="font-bold text-white text-xs sm:text-sm truncate"
+                title={getDisplayName(second)}
+              >
+                {getDisplayName(second)}
                 {second.is_current_user && !isSocialPoster ? ' (You)' : ''}
               </p>
               <p className="text-base sm:text-xl font-black text-slate-100 mt-1">
@@ -143,8 +154,11 @@ export const NativeQuestLeaderboardCard: React.FC<NativeQuestLeaderboardCardProp
               <Badge className="bg-amber-400/25 text-amber-200 border-amber-300/50 text-[10px] font-bold mb-1">
                 👑 #1 CHAMPION
               </Badge>
-              <p className="font-extrabold text-white text-sm sm:text-base truncate">
-                {first.first_name}
+              <p
+                className="font-extrabold text-white text-sm sm:text-base truncate"
+                title={getDisplayName(first)}
+              >
+                {getDisplayName(first)}
                 {first.is_current_user && !isSocialPoster ? ' (You)' : ''}
               </p>
               <p className="text-lg sm:text-2xl font-black text-amber-300 mt-1 drop-shadow">
@@ -180,8 +194,11 @@ export const NativeQuestLeaderboardCard: React.FC<NativeQuestLeaderboardCardProp
               <Badge className="bg-amber-700/30 text-amber-200 border-amber-600/40 text-[10px] mb-1">
                 #3 BRONZE
               </Badge>
-              <p className="font-bold text-white text-xs sm:text-sm truncate">
-                {third.first_name}
+              <p
+                className="font-bold text-white text-xs sm:text-sm truncate"
+                title={getDisplayName(third)}
+              >
+                {getDisplayName(third)}
                 {third.is_current_user && !isSocialPoster ? ' (You)' : ''}
               </p>
               <p className="text-base sm:text-xl font-black text-amber-100 mt-1">
@@ -364,7 +381,7 @@ export const NativeQuestLeaderboardCard: React.FC<NativeQuestLeaderboardCardProp
                 <div className="space-y-1.5 pt-2">
                   <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-slate-400 px-3 pb-1">
                     <span>Rank & Student</span>
-                    <span>Stats & Best Score</span>
+                    <span>Stats & Total Points</span>
                   </div>
                   {runnersUp.map((entry) => (
                     <div
@@ -380,10 +397,13 @@ export const NativeQuestLeaderboardCard: React.FC<NativeQuestLeaderboardCardProp
                           #{entry.rank}
                         </span>
                         <div className="min-w-0">
-                          <p className="text-sm font-bold truncate flex items-center gap-1.5">
-                            {entry.first_name}
+                          <p
+                            className="text-sm font-bold truncate flex items-center gap-1.5"
+                            title={getDisplayName(entry)}
+                          >
+                            <span className="truncate">{getDisplayName(entry)}</span>
                             {entry.is_current_user && (
-                              <Badge className="bg-indigo-500/30 text-indigo-200 border-indigo-400/40 text-[10px] py-0">
+                              <Badge className="bg-indigo-500/30 text-indigo-200 border-indigo-400/40 text-[10px] py-0 shrink-0">
                                 You
                               </Badge>
                             )}
@@ -421,12 +441,14 @@ export const NativeQuestLeaderboardCard: React.FC<NativeQuestLeaderboardCardProp
                     Your Current Position
                   </p>
                   <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-indigo-600/25 border border-indigo-400/50 text-white">
-                    <div className="flex items-center gap-3">
-                      <span className="w-8 h-8 rounded-lg bg-indigo-500/30 border border-indigo-300/40 flex items-center justify-center text-xs font-black">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="w-8 h-8 rounded-lg bg-indigo-500/30 border border-indigo-300/40 flex items-center justify-center text-xs font-black shrink-0">
                         #{myEntry.rank}
                       </span>
-                      <div>
-                        <p className="text-sm font-bold">{myEntry.first_name} (You)</p>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold truncate" title={getDisplayName(myEntry)}>
+                          {getDisplayName(myEntry)} (You)
+                        </p>
                         <p className="text-xs text-indigo-200">
                           Accuracy {myEntry.accuracy}% • Best Combo {myEntry.best_combo}x
                         </p>
@@ -498,11 +520,16 @@ export const NativeQuestLeaderboardCard: React.FC<NativeQuestLeaderboardCardProp
                           key={`poster-${entry.rank}-${entry.first_name}`}
                           className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-slate-200"
                         >
-                          <div className="flex items-center gap-2.5">
-                            <span className="w-6 h-6 rounded-md bg-white/10 flex items-center justify-center text-xs font-black text-amber-300">
+                          <div className="flex items-center gap-2.5 min-w-0 mr-2">
+                            <span className="w-6 h-6 rounded-md bg-white/10 flex items-center justify-center text-xs font-black text-amber-300 shrink-0">
                               #{entry.rank}
                             </span>
-                            <span className="text-sm font-bold text-white">{entry.first_name}</span>
+                            <span
+                              className="text-sm font-bold text-white truncate max-w-[200px]"
+                              title={getDisplayName(entry)}
+                            >
+                              {getDisplayName(entry)}
+                            </span>
                           </div>
                           <div className="flex items-center gap-3 text-xs">
                             <span className="text-orange-300 font-semibold flex items-center gap-0.5">

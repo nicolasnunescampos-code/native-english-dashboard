@@ -212,13 +212,14 @@ AS $$
             gs.best_combo,
             gs.created_at
         FROM public.grammar_game_sessions gs
-        WHERE gs.book = p_book
+        WHERE (p_book IS NULL OR p_book = 'ALL' OR gs.book = p_book)
           AND (p_chapter IS NULL OR p_chapter = 'all' OR gs.chapter = p_chapter)
           AND (p_week_start IS NULL OR gs.created_at >= p_week_start)
     ),
     aggregated AS (
         SELECT
             fs.student_id,
+            SUM(fs.score)::INT AS total_score,
             MAX(fs.score)::INT AS best_score,
             ROUND(AVG(fs.accuracy), 1) AS avg_accuracy,
             MAX(fs.best_combo)::INT AS max_combo,
@@ -230,9 +231,10 @@ AS $$
         SELECT
             a.student_id,
             COALESCE(
-                NULLIF(SPLIT_PART(TRIM(s.student_name), ' ', 1), ''),
+                NULLIF(TRIM(s.student_name), ''),
                 'Student'
             ) AS first_name,
+            a.total_score,
             a.best_score,
             a.avg_accuracy,
             a.max_combo,
@@ -241,9 +243,9 @@ AS $$
         LEFT JOIN public.students s ON s.id = a.student_id
     )
     SELECT
-        RANK() OVER (ORDER BY n.best_score DESC, n.avg_accuracy DESC, n.max_combo DESC) AS rank,
+        RANK() OVER (ORDER BY n.total_score DESC, n.best_score DESC, n.avg_accuracy DESC, n.max_combo DESC) AS rank,
         n.first_name,
-        n.best_score AS score,
+        n.total_score AS score,
         n.avg_accuracy AS accuracy,
         n.max_combo AS best_combo,
         n.total_games AS games_played,

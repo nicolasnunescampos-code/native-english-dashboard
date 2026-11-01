@@ -101,16 +101,21 @@ function normalizeOptions(raw: unknown): string[] {
   return [];
 }
 
-export function normalizeQuestionRow(row: any): GrammarGameQuestion {
+export function normalizeQuestionRow(row: Record<string, unknown>): GrammarGameQuestion {
   return {
     ...row,
+    id: String(row.id || ''),
+    book: (row.book as GrammarBookLevel) || 'Beginner',
+    sentence: String(row.sentence || ''),
+    explanation: String(row.explanation || ''),
+    created_at: String(row.created_at || ''),
     chapter: String(row.chapter),
     error_word_index:
       row.error_word_index === null || row.error_word_index === undefined
         ? null
         : Number(row.error_word_index),
     options: normalizeOptions(row.options),
-    correct_option: row.correct_option ?? '',
+    correct_option: String(row.correct_option ?? ''),
   };
 }
 
@@ -220,7 +225,7 @@ export function useApprovedChapterCounts() {
 
         if (!error && data) {
           const dbCounts: Record<string, number> = {};
-          data.forEach((q: any) => {
+          data.forEach((q: { book?: string; chapter?: string | number }) => {
             const key = `${q.book}_${q.chapter}`;
             dbCounts[key] = (dbCounts[key] || 0) + 1;
           });
@@ -253,7 +258,13 @@ export function useStudentStudiedGrammarChapters(studentName?: string | null) {
       if (error) throw error;
 
       const studied = new Set<string>();
-      (data || []).forEach((cls: any) => {
+      (data || []).forEach(
+        (cls: {
+          class_level?: string;
+          class_chapter?: string;
+          class_type?: string;
+          class_grade?: number | string | null;
+        }) => {
         if (!cls.class_chapter || cls.class_chapter === 'N/A') return;
         const rawLevel = (cls.class_level || 'Beginner').trim();
         const normalizedBook: GrammarBookLevel = rawLevel.includes('Intermediate')
@@ -308,15 +319,19 @@ export function useGrammarLeaderboard(
           p_week_start: weekStartIso,
         });
         if (error) throw error;
-        return ((data || []) as any[]).map((row) => ({
-          rank: Number(row.rank),
-          first_name: String(row.first_name || 'Student'),
-          score: Number(row.score || 0),
-          accuracy: Number(row.accuracy || 0),
-          best_combo: Number(row.best_combo || 0),
-          games_played: Number(row.games_played || 1),
-          is_current_user: Boolean(row.is_current_user),
-        })) as GrammarRushLeaderboardEntry[];
+        return ((data || []) as Record<string, unknown>[]).map((row) => {
+          const name = String(row.student_name || row.full_name || row.first_name || 'Student').trim();
+          return {
+            rank: Number(row.rank),
+            first_name: name,
+            student_name: name,
+            score: Number(row.score || 0),
+            accuracy: Number(row.accuracy || 0),
+            best_combo: Number(row.best_combo || 0),
+            games_played: Number(row.games_played || 1),
+            is_current_user: Boolean(row.is_current_user),
+          };
+        }) as GrammarRushLeaderboardEntry[];
       };
 
       if (book !== 'ALL') {
@@ -333,6 +348,7 @@ export function useGrammarLeaderboard(
         string,
         {
           first_name: string;
+          student_name?: string;
           score: number;
           accuracySum: number;
           entriesCount: number;
@@ -348,6 +364,7 @@ export function useGrammarLeaderboard(
         if (!existing) {
           combinedMap.set(key, {
             first_name: entry.first_name,
+            student_name: entry.student_name,
             score: entry.score,
             accuracySum: entry.accuracy * entry.games_played,
             entriesCount: entry.games_played,
@@ -356,8 +373,8 @@ export function useGrammarLeaderboard(
             is_current_user: entry.is_current_user,
           });
         } else {
-          // Accumulate total best score across levels or keep highest score + sum XP
-          existing.score = Math.max(existing.score, entry.score);
+          // Accumulate total score across levels
+          existing.score += entry.score;
           existing.accuracySum += entry.accuracy * entry.games_played;
           existing.entriesCount += entry.games_played;
           existing.best_combo = Math.max(existing.best_combo, entry.best_combo);
@@ -369,6 +386,7 @@ export function useGrammarLeaderboard(
       const merged = Array.from(combinedMap.values()).map((item) => ({
         rank: 0,
         first_name: item.first_name,
+        student_name: item.student_name,
         score: item.score,
         accuracy:
           item.entriesCount > 0

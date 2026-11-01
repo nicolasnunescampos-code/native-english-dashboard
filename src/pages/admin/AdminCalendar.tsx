@@ -1054,10 +1054,28 @@ const AdminCalendar: React.FC = () => {
     // STYLING
     // ─────────────────────────────────────────────────────────────
 
-    const { min, max } = React.useMemo(() => ({
-        min: new Date(1970, 1, 1, 6, 0, 0),
-        max: new Date(1970, 1, 1, 22, 0, 0),
-    }), []);
+    const { min, max } = React.useMemo(() => {
+        let minHour = 5; // Start at 5:00 AM so 5 AM classes are always visible
+        let maxHour = 23;
+
+        events.forEach(evt => {
+            if (evt.start) {
+                const h = evt.start.getHours();
+                if (h < minHour) minHour = Math.max(0, h);
+            }
+            if (evt.end) {
+                const h = evt.end.getHours();
+                const m = evt.end.getMinutes();
+                const endH = m > 0 ? h + 1 : h;
+                if (endH > maxHour) maxHour = Math.min(23, endH);
+            }
+        });
+
+        return {
+            min: new Date(1970, 1, 1, minHour, 0, 0),
+            max: new Date(1970, 1, 1, maxHour, 59, 59),
+        };
+    }, [events]);
 
     const eventStyleGetter = (event: CalendarClassEvent) => {
         const cls = event.resource as any;

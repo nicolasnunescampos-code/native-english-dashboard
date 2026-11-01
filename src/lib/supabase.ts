@@ -334,7 +334,8 @@ export interface GrammarGameSession {
 
 export interface GrammarRushLeaderboardEntry {
   rank: number;
-  first_name: string;
+  first_name: string; // Contains student's name and last name
+  student_name?: string;
   score: number;
   accuracy: number;
   best_combo: number;

@@ -66,20 +66,39 @@ import {
   XCircle,
   Clock,
   Sparkles,
+  Award,
+  GraduationCap,
 } from 'lucide-react';
 import { NativeVoiceSettingsModal } from '@/components/grammar-rush/NativeVoiceSettingsModal';
+import { FullCertificateModal } from '@/components/grammar-rush/FullCertificateModal';
 
 interface EnrichedSession extends GrammarGameSession {
   student_name: string;
 }
 
-function normalizeMistakesArray(raw: any): GrammarGameMistake[] {
+export interface StudentCertificateRecord {
+  student_id: string;
+  student_name: string;
+  book: GrammarBookLevel;
+  cefr: string;
+  completedChaptersCount: number;
+  totalChapters: number;
+  completionPercent: number;
+  isCertified: boolean;
+  totalScore: number;
+  bestCombo: number;
+  avgAccuracy: number;
+  lastSessionAt?: string;
+  masteredChapters: string[];
+}
+
+function normalizeMistakesArray(raw: unknown): GrammarGameMistake[] {
   if (!raw) return [];
-  if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw)) return raw as GrammarGameMistake[];
   if (typeof raw === 'string') {
     try {
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
+      return Array.isArray(parsed) ? (parsed as GrammarGameMistake[]) : [];
     } catch {
       return [];
     }
@@ -105,6 +124,13 @@ export default function AdminGrammarRushTracker() {
     useState<EnrichedSession | null>(null);
   const [voiceSettingsOpen, setVoiceSettingsOpen] = useState(false);
 
+  // Certificate modal and filter tabs
+  const [selectedCertificateForModal, setSelectedCertificateForModal] =
+    useState<StudentCertificateRecord | null>(null);
+  const [certificateViewTab, setCertificateViewTab] = useState<
+    'all' | 'Beginner' | 'Intermediate' | 'Advanced' | 'in_progress'
+  >('all');
+
   const fetchPlatformAnalytics = async () => {
     setLoading(true);
     try {
@@ -113,7 +139,7 @@ export default function AdminGrammarRushTracker() {
           .from('grammar_game_sessions')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(1000),
+          .limit(10000),
         supabase
           .from('students')
           .select('id, student_name')
@@ -141,13 +167,13 @@ export default function AdminGrammarRushTracker() {
         if (s.id) stuMap.set(s.id, s.student_name);
       });
 
-      const enriched: EnrichedSession[] = ((sessionsRes.data || []) as any[]).map(
-        (s) => ({
-          ...s,
-          mistakes: normalizeMistakesArray(s.mistakes),
-          student_name: stuMap.get(s.student_id) || 'Student',
-        })
-      );
+      const enriched: EnrichedSession[] = (
+        (sessionsRes.data || []) as unknown as GrammarGameSession[]
+      ).map((s) => ({
+        ...s,
+        mistakes: normalizeMistakesArray(s.mistakes),
+        student_name: stuMap.get(s.student_id) || 'Student',
+      }));
 
       setSessions(enriched);
     } catch (err) {
@@ -190,6 +216,138 @@ export default function AdminGrammarRushTracker() {
 
     return { totalSessions, uniqueStudents, avgAccuracy, topScore };
   }, [filteredSessions]);
+
+  // Native Quest Certificates Data
+  const studentCertificatesData = useMemo(() => {
+    const stuMap = new Map<string, string>();
+    studentsList.forEach((s) => {
+      if (s.id) stuMap.set(s.id, s.student_name);
+    });
+    sessions.forEach((s) => {
+      if (s.student_id && !stuMap.has(s.student_id)) {
+        stuMap.set(s.student_id, s.student_name || 'Student');
+      }
+    });
+
+    const records: StudentCertificateRecord[] = [];
+    const booksToEvaluate: GrammarBookLevel[] =
+      filterBook === 'all' ? GRAMMAR_BOOK_LEVELS : [filterBook];
+
+    stuMap.forEach((name, studentId) => {
+      if (filterStudentId !== 'all' && studentId !== filterStudentId) return;
+
+      booksToEvaluate.forEach((book) => {
+        const bookMeta = getGrammarBookMeta(book);
+        const bookSessions = sessions.filter(
+          (s) => s.student_id === studentId && s.book === book
+        );
+
+        if (bookSessions.length === 0) return;
+
+        const masteredChapters: string[] = [];
+        let totalScoreSum = 0;
+        let bestCombo = 0;
+
+        bookMeta.chapters.forEach((ch) => {
+          const chSessions = bookSessions.filter(
+            (s) => String(s.chapter) === String(ch.chapter)
+          );
+          if (chSessions.length > 0) {
+            const chBest = Math.max(...chSessions.map((s) => Number(s.score || 0)));
+            const chMaxAcc = Math.max(...chSessions.map((s) => Number(s.accuracy || 0)));
+            totalScoreSum += chBest;
+            bestCombo = Math.max(bestCombo, ...chSessions.map((s) => Number(s.best_combo || 0)));
+
+            if (chBest >= 500 && chMaxAcc >= 80) {
+              masteredChapters.push(String(ch.chapter));
+            }
+          }
+        });
+
+        const completedCount = masteredChapters.length;
+        const totalChapters = bookMeta.chapters.length || 10;
+        const completionPercent = Math.round((completedCount / totalChapters) * 100);
+        const isCertified = completedCount >= totalChapters;
+
+        const totalAccuracies = bookSessions.map((s) => Number(s.accuracy || 0));
+        const avgAcc =
+          totalAccuracies.length > 0
+            ? Math.round(totalAccuracies.reduce((a, b) => a + b, 0) / totalAccuracies.length)
+            : 0;
+
+        const lastSession = bookSessions[0]?.created_at || undefined;
+
+        records.push({
+          student_id: studentId,
+          student_name: name,
+          book,
+          cefr: bookMeta.cefr,
+          completedChaptersCount: completedCount,
+          totalChapters,
+          completionPercent,
+          isCertified,
+          totalScore: Math.max(350, totalScoreSum + bookSessions.length * 20),
+          bestCombo,
+          avgAccuracy: avgAcc,
+          lastSessionAt: lastSession,
+          masteredChapters,
+        });
+      });
+    });
+
+    const certified = records
+      .filter((r) => r.isCertified)
+      .sort((a, b) => b.totalScore - a.totalScore || b.avgAccuracy - a.avgAccuracy);
+
+    const inProgress = records
+      .filter((r) => !r.isCertified && r.completedChaptersCount > 0)
+      .sort((a, b) => b.completedChaptersCount - a.completedChaptersCount || b.totalScore - a.totalScore);
+
+    const uniqueCertifiedStudents = new Set(certified.map((r) => r.student_id)).size;
+    const totalCertificates = certified.length;
+
+    const countByBook = {
+      Beginner: certified.filter((r) => r.book === 'Beginner').length,
+      Intermediate: certified.filter((r) => r.book === 'Intermediate').length,
+      Advanced: certified.filter((r) => r.book === 'Advanced').length,
+    };
+
+    const certificatesByStudentId = new Map<string, StudentCertificateRecord[]>();
+    certified.forEach((c) => {
+      const list = certificatesByStudentId.get(c.student_id) || [];
+      list.push(c);
+      certificatesByStudentId.set(c.student_id, list);
+    });
+
+    const inProgressByStudentId = new Map<string, StudentCertificateRecord>();
+    inProgress.forEach((p) => {
+      const existing = inProgressByStudentId.get(p.student_id);
+      if (!existing || p.completedChaptersCount > existing.completedChaptersCount) {
+        inProgressByStudentId.set(p.student_id, p);
+      }
+    });
+
+    return {
+      allRecords: records,
+      certified,
+      inProgress,
+      uniqueCertifiedStudents,
+      totalCertificates,
+      countByBook,
+      certificatesByStudentId,
+      inProgressByStudentId,
+    };
+  }, [sessions, studentsList, filterBook, filterStudentId]);
+
+  const displayedCertificateRecords = useMemo(() => {
+    if (certificateViewTab === 'in_progress') {
+      return studentCertificatesData.inProgress;
+    }
+    if (certificateViewTab === 'all') {
+      return studentCertificatesData.certified;
+    }
+    return studentCertificatesData.certified.filter((r) => r.book === certificateViewTab);
+  }, [studentCertificatesData, certificateViewTab]);
 
   // Student Leaderboard Rankings (1st, 2nd, 3rd...)
   const leaderboardRows = useMemo(() => {
@@ -259,7 +417,12 @@ export default function AdminGrammarRushTracker() {
           item.accuracies.reduce((a, b) => a + b, 0) / item.accuracies.length
         ),
       }))
-      .sort((a, b) => b.best_score - a.best_score || b.avg_accuracy - a.avg_accuracy)
+      .sort(
+        (a, b) =>
+          b.total_points - a.total_points ||
+          b.best_score - a.best_score ||
+          b.avg_accuracy - a.avg_accuracy
+      )
       .map((item, idx) => ({
         ...item,
         rank: idx + 1,
@@ -509,8 +672,8 @@ export default function AdminGrammarRushTracker() {
         </CardContent>
       </Card>
 
-      {/* 4 KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 5 KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <Card>
           <CardContent className="p-5">
             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -550,6 +713,33 @@ export default function AdminGrammarRushTracker() {
           </CardContent>
         </Card>
 
+        {/* KPI: Certificates Earned */}
+        <Card className="border-amber-400/40 bg-gradient-to-br from-amber-500/[0.08] to-amber-600/[0.02]">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              <span>Certificates Earned</span>
+              <Award className="w-4 h-4 text-amber-500" />
+            </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <p className="text-3xl font-extrabold text-amber-600 dark:text-amber-400">
+                {studentCertificatesData.uniqueCertifiedStudents}
+              </p>
+              <span className="text-xs font-bold text-muted-foreground">
+                student{studentCertificatesData.uniqueCertifiedStudents === 1 ? '' : 's'}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1 truncate" title={
+              filterBook === 'all'
+                ? `${studentCertificatesData.totalCertificates} total diploma${studentCertificatesData.totalCertificates === 1 ? '' : 's'} (${studentCertificatesData.countByBook.Beginner} Beg • ${studentCertificatesData.countByBook.Intermediate} Int • ${studentCertificatesData.countByBook.Advanced} Adv)`
+                : `${studentCertificatesData.certified.length} ${filterBook} diploma${studentCertificatesData.certified.length === 1 ? '' : 's'} (10/10 chapters)`
+            }>
+              {filterBook === 'all'
+                ? `${studentCertificatesData.totalCertificates} total (${studentCertificatesData.countByBook.Beginner} Beg • ${studentCertificatesData.countByBook.Intermediate} Int • ${studentCertificatesData.countByBook.Advanced} Adv)`
+                : `${studentCertificatesData.certified.length} ${filterBook} diploma${studentCertificatesData.certified.length === 1 ? '' : 's'} (10/10 chapters)`}
+            </p>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardContent className="p-5">
             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -567,6 +757,256 @@ export default function AdminGrammarRushTracker() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ============================================================ */}
+      {/* NATIVE QUEST CERTIFICATES OF MASTERY SECTION                 */}
+      {/* ============================================================ */}
+      <Card className="overflow-hidden border-amber-400/40 bg-gradient-to-br from-amber-500/[0.04] via-transparent to-indigo-500/[0.03]">
+        <CardHeader className="pb-3 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400 shadow-sm shrink-0">
+              <Award className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <CardTitle className="text-base sm:text-lg font-extrabold text-foreground">
+                  Native Quest Certificates &amp; Diplomas
+                </CardTitle>
+                <Badge className="bg-amber-500/20 text-amber-800 dark:text-amber-300 border-amber-500/40 text-xs font-black px-2.5 py-0.5">
+                  🎓 {studentCertificatesData.uniqueCertifiedStudents} Student{studentCertificatesData.uniqueCertifiedStudents === 1 ? '' : 's'} Certified
+                </Badge>
+                {studentCertificatesData.totalCertificates > 0 && (
+                  <Badge variant="outline" className="text-xs border-amber-500/40 text-amber-700 dark:text-amber-300 font-bold">
+                    {studentCertificatesData.totalCertificates} Total Awarded
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Students who completed all 10 chapters (score ≥ 500 &amp; accuracy ≥ 80%) to unlock their official verified diploma
+              </p>
+            </div>
+          </div>
+
+          {/* Filter Pills */}
+          <div className="inline-flex rounded-xl liquid-glass-pill p-1 text-xs font-bold self-start md:self-center overflow-x-auto max-w-full">
+            <button
+              type="button"
+              onClick={() => setCertificateViewTab('all')}
+              className={`px-3 py-1.5 rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+                certificateViewTab === 'all'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              All Certified ({studentCertificatesData.certified.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setCertificateViewTab('Beginner')}
+              className={`px-3 py-1.5 rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+                certificateViewTab === 'Beginner'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Beginner ({studentCertificatesData.countByBook.Beginner})
+            </button>
+            <button
+              type="button"
+              onClick={() => setCertificateViewTab('Intermediate')}
+              className={`px-3 py-1.5 rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+                certificateViewTab === 'Intermediate'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Intermediate ({studentCertificatesData.countByBook.Intermediate})
+            </button>
+            <button
+              type="button"
+              onClick={() => setCertificateViewTab('Advanced')}
+              className={`px-3 py-1.5 rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+                certificateViewTab === 'Advanced'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Advanced ({studentCertificatesData.countByBook.Advanced})
+            </button>
+            <button
+              type="button"
+              onClick={() => setCertificateViewTab('in_progress')}
+              className={`px-3 py-1.5 rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+                certificateViewTab === 'in_progress'
+                  ? 'bg-indigo-600 text-white font-black shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              In Progress ({studentCertificatesData.inProgress.length})
+            </button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/25">
+                  <TableHead className="w-[60px] text-center">#</TableHead>
+                  <TableHead>Student</TableHead>
+                  <TableHead>Curriculum Level</TableHead>
+                  <TableHead>Mastery Progress</TableHead>
+                  <TableHead className="text-right">Total Score</TableHead>
+                  <TableHead className="text-center">Avg Accuracy</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="text-right pr-4">Certificate</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {displayedCertificateRecords.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="py-12 text-center">
+                      <div className="max-w-md mx-auto space-y-3">
+                        <div className="w-12 h-12 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400 mx-auto">
+                          <Award className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <p className="font-extrabold text-foreground text-sm">
+                            {certificateViewTab === 'in_progress'
+                              ? 'No students currently in progress.'
+                              : `No students have unlocked the ${
+                                  certificateViewTab === 'all'
+                                    ? '10-chapter certificate'
+                                    : `${certificateViewTab} certificate`
+                                } yet.`}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Students automatically earn their verified diploma once all 10 chapters of a level are mastered with a score ≥ 500 and accuracy ≥ 80%.
+                          </p>
+                        </div>
+                        {certificateViewTab !== 'in_progress' && studentCertificatesData.inProgress.length > 0 && (
+                          <div className="pt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setCertificateViewTab('in_progress')}
+                              className="text-xs font-bold gap-1.5 border-amber-500/40 text-amber-700 dark:text-amber-300 cursor-pointer"
+                            >
+                              <span>View {studentCertificatesData.inProgress.length} Students In Progress</span>
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  displayedCertificateRecords.map((cert, index) => (
+                    <TableRow key={`${cert.student_id}-${cert.book}`} className="hover:bg-muted/20">
+                      <TableCell className="text-center font-bold text-xs text-muted-foreground">
+                        {index + 1}
+                      </TableCell>
+
+                      <TableCell>
+                        <Link
+                          to={`${profileBaseUrl}?student=${encodeURIComponent(cert.student_name)}`}
+                          className="font-bold text-sm text-foreground hover:text-primary inline-flex items-center gap-1.5"
+                        >
+                          <span>{cert.student_name}</span>
+                          <ExternalLink className="w-3 h-3 opacity-60" />
+                        </Link>
+                      </TableCell>
+
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={
+                            cert.book === 'Beginner'
+                              ? 'border-emerald-500/40 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10'
+                              : cert.book === 'Intermediate'
+                                ? 'border-sky-500/40 text-sky-700 dark:text-sky-300 bg-sky-500/10'
+                                : 'border-purple-500/40 text-purple-700 dark:text-purple-300 bg-purple-500/10'
+                          }
+                        >
+                          {cert.book} • {cert.cefr}
+                        </Badge>
+                      </TableCell>
+
+                      <TableCell className="min-w-[160px]">
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-xs font-bold">
+                            <span>{cert.completedChaptersCount}/{cert.totalChapters} Chapters</span>
+                            <span className={cert.isCertified ? 'text-emerald-600 dark:text-emerald-400 font-extrabold' : 'text-muted-foreground'}>
+                              {cert.completionPercent}%
+                            </span>
+                          </div>
+                          <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                cert.isCertified
+                                  ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                                  : 'bg-gradient-to-r from-amber-500 to-orange-400'
+                              }`}
+                              style={{ width: `${cert.completionPercent}%` }}
+                            />
+                          </div>
+                        </div>
+                      </TableCell>
+
+                      <TableCell className="text-right font-black text-sm text-sky-600 dark:text-sky-400">
+                        {cert.totalScore.toLocaleString()} pts
+                      </TableCell>
+
+                      <TableCell className="text-center">
+                        <Badge
+                          className={
+                            cert.avgAccuracy >= 80
+                              ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                              : cert.avgAccuracy >= 60
+                                ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                                : 'bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-500/30'
+                          }
+                        >
+                          {cert.avgAccuracy}%
+                        </Badge>
+                      </TableCell>
+
+                      <TableCell className="text-center">
+                        {cert.isCertified ? (
+                          <Badge className="bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/40 text-[10px] font-extrabold gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                            <span>Certified 🎓</span>
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                            {cert.totalChapters - cert.completedChaptersCount} Ch. remaining
+                          </Badge>
+                        )}
+                      </TableCell>
+
+                      <TableCell className="text-right pr-4">
+                        <Button
+                          size="sm"
+                          onClick={() => setSelectedCertificateForModal(cert)}
+                          className={
+                            cert.isCertified
+                              ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs gap-1.5 h-8 rounded-xl shadow-sm cursor-pointer'
+                              : 'text-xs font-semibold gap-1.5 h-8 rounded-xl cursor-pointer'
+                          }
+                          variant={cert.isCertified ? 'default' : 'outline'}
+                        >
+                          <Award className="w-3.5 h-3.5" />
+                          <span>{cert.isCertified ? 'View Certificate 🎓' : 'Preview'}</span>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* ============================================================ */}
       {/* STUDENT LEADERBOARD TABLE (1ST, 2ND, 3RD, POINTS & ACCURACY) */}
@@ -612,8 +1052,9 @@ export default function AdminGrammarRushTracker() {
               <TableRow className="bg-muted/25">
                 <TableHead className="w-[80px] text-center">Place</TableHead>
                 <TableHead>Student</TableHead>
-                <TableHead className="text-right">Best Score</TableHead>
-                <TableHead className="text-right">Total Points</TableHead>
+                <TableHead className="text-center">Certificate</TableHead>
+                <TableHead className="text-right font-black text-amber-600 dark:text-amber-400">Total Points</TableHead>
+                <TableHead className="text-right text-muted-foreground font-semibold">Best Score</TableHead>
                 <TableHead className="text-center">Avg Accuracy</TableHead>
                 <TableHead className="text-center">Best Combo</TableHead>
                 <TableHead className="text-center">Rounds Played</TableHead>
@@ -624,54 +1065,91 @@ export default function AdminGrammarRushTracker() {
               {leaderboardRows.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={9}
                     className="text-center py-10 text-muted-foreground text-sm"
                   >
                     No student scores recorded for this filter yet.
                   </TableCell>
                 </TableRow>
               ) : (
-                leaderboardRows.map((entry) => (
-                  <TableRow key={entry.student_id} className="hover:bg-muted/20">
-                    <TableCell className="text-center font-extrabold">
-                      {entry.rank === 1 ? (
-                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-400/25 text-amber-600 dark:text-amber-300 border border-amber-400/50">
-                          <Crown className="w-4 h-4" />
-                        </span>
-                      ) : entry.rank === 2 ? (
-                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-300/35 text-slate-700 dark:text-slate-200 border border-slate-400/40">
-                          <Medal className="w-4 h-4" />
-                        </span>
-                      ) : entry.rank === 3 ? (
-                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-orange-400/25 text-orange-700 dark:text-orange-300 border border-orange-400/40">
-                          <Medal className="w-4 h-4" />
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground font-bold">
-                          #{entry.rank}
-                        </span>
-                      )}
-                    </TableCell>
+                leaderboardRows.map((entry) => {
+                  const studentCerts =
+                    studentCertificatesData.certificatesByStudentId.get(entry.student_id) || [];
+                  const highestInProgress =
+                    studentCertificatesData.inProgressByStudentId.get(entry.student_id);
 
-                    <TableCell>
-                      <Link
-                        to={`${profileBaseUrl}?student=${encodeURIComponent(
-                          entry.student_name
-                        )}`}
-                        className="font-bold text-sm text-foreground hover:text-primary inline-flex items-center gap-1.5"
-                      >
-                        <span>{entry.student_name}</span>
-                        <ExternalLink className="w-3 h-3 opacity-60" />
-                      </Link>
-                    </TableCell>
+                  return (
+                    <TableRow key={entry.student_id} className="hover:bg-muted/20">
+                      <TableCell className="text-center font-extrabold">
+                        {entry.rank === 1 ? (
+                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-400/25 text-amber-600 dark:text-amber-300 border border-amber-400/50">
+                            <Crown className="w-4 h-4" />
+                          </span>
+                        ) : entry.rank === 2 ? (
+                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-300/35 text-slate-700 dark:text-slate-200 border border-slate-400/40">
+                            <Medal className="w-4 h-4" />
+                          </span>
+                        ) : entry.rank === 3 ? (
+                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-orange-400/25 text-orange-700 dark:text-orange-300 border border-orange-400/40">
+                            <Medal className="w-4 h-4" />
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground font-bold">
+                            #{entry.rank}
+                          </span>
+                        )}
+                      </TableCell>
 
-                    <TableCell className="text-right font-black text-sm text-sky-600 dark:text-sky-400">
-                      {entry.best_score.toLocaleString()} pts
-                    </TableCell>
+                      <TableCell>
+                        <Link
+                          to={`${profileBaseUrl}?student=${encodeURIComponent(
+                            entry.student_name
+                          )}`}
+                          className="font-bold text-sm text-foreground hover:text-primary inline-flex items-center gap-1.5"
+                        >
+                          <span>{entry.student_name}</span>
+                          <ExternalLink className="w-3 h-3 opacity-60" />
+                        </Link>
+                      </TableCell>
 
-                    <TableCell className="text-right font-semibold text-xs text-muted-foreground">
-                      {entry.total_points.toLocaleString()} pts
-                    </TableCell>
+                      <TableCell className="text-center">
+                        {studentCerts.length > 0 ? (
+                          <div className="flex flex-wrap items-center justify-center gap-1">
+                            {studentCerts.map((c) => (
+                              <button
+                                key={c.book}
+                                type="button"
+                                onClick={() => setSelectedCertificateForModal(c)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 border border-amber-500/40 text-[10px] font-black transition-all hover:scale-105 cursor-pointer shadow-xs"
+                                title={`Click to view ${c.student_name}'s official ${c.book} Certificate`}
+                              >
+                                <Award className="w-3 h-3 text-amber-500" />
+                                <span>{c.book} 🎓</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : highestInProgress && highestInProgress.completedChaptersCount > 0 ? (
+                          <div className="flex flex-col items-center justify-center text-[10px] text-muted-foreground font-semibold">
+                            <span>{highestInProgress.completedChaptersCount}/10 Ch.</span>
+                            <div className="w-12 h-1 bg-muted rounded-full overflow-hidden mt-0.5">
+                              <div
+                                className="h-full bg-amber-500 rounded-full"
+                                style={{ width: `${highestInProgress.completionPercent}%` }}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+
+                      <TableCell className="text-right font-black text-sm text-amber-600 dark:text-amber-400">
+                        {entry.total_points.toLocaleString()} pts
+                      </TableCell>
+
+                      <TableCell className="text-right font-semibold text-xs text-sky-600 dark:text-sky-400">
+                        {entry.best_score.toLocaleString()} pts
+                      </TableCell>
 
                     <TableCell className="text-center">
                       <Badge
@@ -706,9 +1184,10 @@ export default function AdminGrammarRushTracker() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
+                );
+              })
+            )}
+          </TableBody>
           </Table>
         </div>
       </Card>
@@ -852,7 +1331,7 @@ export default function AdminGrammarRushTracker() {
                     />
                     <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
                     <RechartsTooltip
-                      formatter={(val: any) => [`${val}%`, 'Avg Accuracy']}
+                      formatter={(val: unknown) => [`${String(val)}%`, 'Avg Accuracy']}
                       labelFormatter={(_, payload) =>
                         payload?.[0]?.payload?.fullLabel || ''
                       }
@@ -1042,6 +1521,19 @@ export default function AdminGrammarRushTracker() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Full Certificate of Mastery Modal for viewing/printing student diplomas */}
+      {selectedCertificateForModal && (
+        <FullCertificateModal
+          isOpen={!!selectedCertificateForModal}
+          onClose={() => setSelectedCertificateForModal(null)}
+          studentName={selectedCertificateForModal.student_name}
+          book={selectedCertificateForModal.book}
+          cefr={selectedCertificateForModal.cefr}
+          totalScore={selectedCertificateForModal.totalScore}
+          completedChaptersCount={selectedCertificateForModal.completedChaptersCount}
+        />
+      )}
 
       {/* Admin-only OpenAI Studio Voice Configuration Modal */}
       {role === 'admin' && (

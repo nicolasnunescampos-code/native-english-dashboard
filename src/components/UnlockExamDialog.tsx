@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, Exam } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { cleanStudentName, resolveStudent } from '@/lib/courseUtils';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -21,6 +22,8 @@ export function UnlockExamDialog({ studentName, variant = "default", size = "def
     const [canceling, setCanceling] = useState(false);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
+    const displayName = cleanStudentName(studentName);
+
     useEffect(() => {
         if (isDialogOpen) {
             fetchExamsAndSelect();
@@ -34,17 +37,32 @@ export function UnlockExamDialog({ studentName, variant = "default", size = "def
 
             // Try to auto-select matching exam for student based on recent grammar class
             try {
-                const cleanName = studentName?.trim() || "";
-                const { data: lastGrammar } = await supabase
+                const safeName = displayName.replace(/['"]/g, '');
+                let { data: lastGrammar } = await supabase
                     .from('classes')
                     .select('class_level, class_chapter')
-                    .or(`student_name.ilike.%${cleanName}%,student_name.eq.${cleanName}`)
+                    .ilike('student_name', `%${safeName}%`)
                     .eq('class_type', 'Grammar')
                     .not('class_grade', 'is', null)
                     .order('date', { ascending: false })
                     .order('time', { ascending: false })
                     .limit(1)
                     .maybeSingle();
+
+                if (!lastGrammar && safeName.includes(' ')) {
+                    const firstName = safeName.split(' ')[0];
+                    const { data: fallbackGrammar } = await supabase
+                        .from('classes')
+                        .select('class_level, class_chapter')
+                        .ilike('student_name', `%${firstName}%`)
+                        .eq('class_type', 'Grammar')
+                        .not('class_grade', 'is', null)
+                        .order('date', { ascending: false })
+                        .order('time', { ascending: false })
+                        .limit(1)
+                        .maybeSingle();
+                    lastGrammar = fallbackGrammar;
+                }
 
                 if (lastGrammar) {
                     const targetChapterNum = lastGrammar.class_chapter === '10' ? 2 : 1;
@@ -68,23 +86,8 @@ export function UnlockExamDialog({ studentName, variant = "default", size = "def
     }
 
     async function getStudentId(): Promise<string | null> {
-        const cleanName = studentName?.trim() || "";
-        const { data: s1 } = await supabase
-            .from('students')
-            .select('id')
-            .ilike('student_name', cleanName)
-            .maybeSingle();
-
-        if (s1?.id) return s1.id;
-
-        const { data: s2 } = await supabase
-            .from('students')
-            .select('id')
-            .or(`student_name.ilike.%${cleanName}%,student_name.eq.${cleanName}`)
-            .limit(1)
-            .maybeSingle();
-
-        return s2?.id || null;
+        const student = await resolveStudent(studentName);
+        return student?.id || null;
     }
 
     async function handleUnlockExam() {
@@ -129,7 +132,7 @@ export function UnlockExamDialog({ studentName, variant = "default", size = "def
             
             if (insertError) throw insertError;
 
-            toast.success(`Exam unlocked successfully for the student!`);
+            toast.success(`Exam unlocked successfully for ${displayName}!`);
             setIsDialogOpen(false);
             setSelectedExamId('');
             window.location.reload();
@@ -147,7 +150,7 @@ export function UnlockExamDialog({ studentName, variant = "default", size = "def
         const examToCancel = exams.find(e => e.id === selectedExamId);
         if (!examToCancel) return;
 
-        if (!window.confirm(`Are you sure you want to bypass/cancel ${examToCancel.title} for ${studentName}?`)) {
+        if (!window.confirm(`Are you sure you want to bypass/cancel ${examToCancel.title} for ${displayName}?`)) {
             return;
         }
 
@@ -156,7 +159,7 @@ export function UnlockExamDialog({ studentName, variant = "default", size = "def
         try {
             const studentId = await getStudentId();
             if (!studentId) {
-                throw new Error("Student not found");
+                throw new Error("Student ID not found in database.");
             }
 
             // Delete any existing submission for this student and exam
@@ -178,7 +181,7 @@ export function UnlockExamDialog({ studentName, variant = "default", size = "def
 
             if (error) throw error;
 
-            toast.success(`Exam bypassed successfully for ${studentName}!`);
+            toast.success(`Exam bypassed successfully for ${displayName}!`);
             setIsDialogOpen(false);
             setSelectedExamId('');
             
@@ -201,7 +204,7 @@ export function UnlockExamDialog({ studentName, variant = "default", size = "def
             </DialogTrigger>
             <DialogContent onClick={e => e.stopPropagation()}>
                 <DialogHeader>
-                    <DialogTitle>Unlock Exam for {studentName}</DialogTitle>
+                    <DialogTitle>Unlock Exam for {displayName}</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                     <div className="space-y-2">

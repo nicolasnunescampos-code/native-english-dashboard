@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { startOfWeek, endOfWeek } from 'date-fns';
 
 export type ClassType = "Grammar" | "Reading" | "Listening" | "Club (Reading)" | "Club (Listening)" | "Club" | "Exam";
 
@@ -32,15 +33,112 @@ export function getNextLevel(currentLevel: string): string {
   return CLASS_LEVELS[currentIndex + 1];
 }
 
+export function cleanStudentName(rawName: string | null | undefined): string {
+  if (!rawName) return '';
+  let cleaned = String(rawName).trim();
+  if (cleaned.includes(' - ')) {
+    cleaned = cleaned.split(' - ')[0].trim();
+  }
+  cleaned = cleaned.replace(/['’]s\s+class\b/gi, '');
+  cleaned = cleaned.replace(/\s+class$/gi, '');
+  cleaned = cleaned.replace(/['’]s$/gi, '');
+  cleaned = cleaned.replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '');
+  return cleaned.trim();
+}
+
+export interface ResolvedStudent {
+  id: string;
+  student_name: string;
+  course_type?: string;
+  email?: string;
+}
+
+export async function resolveStudent(rawName: string | null | undefined): Promise<ResolvedStudent | null> {
+  const clean = cleanStudentName(rawName);
+  if (!clean) return null;
+
+  // 1. Direct case-insensitive match on student_name
+  const { data: s1 } = await supabase
+    .from('students')
+    .select('id, student_name, course_type, email')
+    .ilike('student_name', clean)
+    .maybeSingle();
+
+  if (s1?.id) return s1 as ResolvedStudent;
+
+  // 2. Query students table for in-memory matching (handles typos, substrings, and "Sheeran" vs "Scheeren")
+  const { data: allStudents } = await supabase
+    .from('students')
+    .select('id, student_name, course_type, email');
+
+  if (!allStudents || allStudents.length === 0) return null;
+
+  const target = clean.toLowerCase();
+  const targetWords = target.split(/\s+/).filter(Boolean);
+
+  // 2a. Exact trimmed match
+  const exact = allStudents.find(s => (s.student_name || '').trim().toLowerCase() === target);
+  if (exact) return exact as ResolvedStudent;
+
+  // 2b. Substring match (either clean contains student_name or student_name contains clean)
+  const sub = allStudents.find(s => {
+    const sName = (s.student_name || '').trim().toLowerCase();
+    return sName && (target.includes(sName) || sName.includes(target));
+  });
+  if (sub) return sub as ResolvedStudent;
+
+  // 2c. First name + last name similarity (handles spelling variants e.g. Scheeren vs Sheeran)
+  if (targetWords.length > 0) {
+    const firstMatches = allStudents.filter(s => {
+      const sWords = (s.student_name || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+      return sWords.length > 0 && sWords[0] === targetWords[0];
+    });
+
+    if (firstMatches.length === 1) {
+      return firstMatches[0] as ResolvedStudent;
+    }
+
+    if (firstMatches.length > 1 && targetWords.length > 1) {
+      const targetLast = targetWords[targetWords.length - 1];
+      const best = firstMatches.find(s => {
+        const sWords = (s.student_name || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+        const sLast = sWords[sWords.length - 1];
+        if (!sLast) return false;
+        return (
+          sLast.startsWith(targetLast.slice(0, 2)) ||
+          targetLast.startsWith(sLast.slice(0, 2)) ||
+          sLast.includes(targetLast) ||
+          targetLast.includes(sLast)
+        );
+      });
+      if (best) return best as ResolvedStudent;
+    }
+  }
+
+  return null;
+}
+
 export async function fetchStudentNextChapters(
   studentName: string
 ): Promise<Partial<Record<ClassType, NextChapterInfo>>> {
-  const cleanName = studentName?.trim() || "";
-  const { data: history } = await supabase
+  const cleanName = cleanStudentName(studentName);
+  const safeName = cleanName.replace(/['"]/g, '');
+  
+  let { data: history } = await supabase
     .from("classes")
     .select("class_type, class_chapter, class_level, date, time")
-    .or(`student_name.ilike.%${cleanName}%,student_name.eq.${cleanName}`)
+    .ilike("student_name", `%${safeName}%`)
     .not("class_grade", "is", null);
+
+  if ((!history || history.length === 0) && safeName.includes(' ')) {
+    const firstName = safeName.split(' ')[0];
+    const { data: fallbackHistory } = await supabase
+      .from("classes")
+      .select("class_type, class_chapter, class_level, date, time")
+      .ilike("student_name", `%${firstName}%`)
+      .not("class_grade", "is", null);
+    history = fallbackHistory;
+  }
 
   const nextChapters: Partial<Record<ClassType, NextChapterInfo>> = {};
   if (!history) return nextChapters;
@@ -79,37 +177,20 @@ export async function fetchStudentNextChapters(
   return nextChapters;
 }
 
-import { startOfWeek, endOfWeek } from 'date-fns';
-
 export async function fetchUpcomingClassType(studentName: string): Promise<ClassType> {
   if (!studentName) return 'Grammar';
 
-  const cleanName = studentName.trim();
+  const cleanName = cleanStudentName(studentName);
+  const safeName = cleanName.replace(/['"]/g, '');
 
   // First check what course type the student makes and find student ID
   let studentId: string | null = null;
   let courseType = 'Native English';
 
-  const { data: student } = await supabase
-    .from('students')
-    .select('id, course_type')
-    .ilike('student_name', cleanName)
-    .maybeSingle();
-
-  if (student) {
-    studentId = student.id;
-    courseType = student.course_type || 'Native English';
-  } else {
-    const { data: fallbackStudent } = await supabase
-      .from('students')
-      .select('id, course_type')
-      .or(`student_name.ilike.%${cleanName}%,student_name.eq.${cleanName}`)
-      .limit(1)
-      .maybeSingle();
-    if (fallbackStudent) {
-      studentId = fallbackStudent.id;
-      courseType = fallbackStudent.course_type || 'Native English';
-    }
+  const resolved = await resolveStudent(cleanName);
+  if (resolved) {
+    studentId = resolved.id;
+    courseType = resolved.course_type || 'Native English';
   }
 
   if (courseType === 'Conversation Club') {
@@ -121,11 +202,21 @@ export async function fetchUpcomingClassType(studentName: string): Promise<Class
   const start = startOfWeek(now, { weekStartsOn: 1 }).toISOString().split('T')[0];
   const end = endOfWeek(now, { weekStartsOn: 1 }).toISOString().split('T')[0];
 
-  const { data: classes } = await supabase
+  let { data: classes } = await supabase
     .from("classes")
     .select("class_type, class_chapter, class_level, date, time")
-    .or(`student_name.ilike.%${cleanName}%,student_name.eq.${cleanName}`)
+    .ilike("student_name", `%${safeName}%`)
     .not("class_grade", "is", null);
+
+  if ((!classes || classes.length === 0) && safeName.includes(' ')) {
+    const firstName = safeName.split(' ')[0];
+    const { data: fallbackClasses } = await supabase
+      .from("classes")
+      .select("class_type, class_chapter, class_level, date, time")
+      .ilike("student_name", `%${firstName}%`)
+      .not("class_grade", "is", null);
+    classes = fallbackClasses;
+  }
 
   if (!classes || classes.length === 0) {
     return 'Grammar';

@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Link } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 import { toLocalDate, getTimeZoneLabel } from "@/lib/dateUtils"
-import { fetchUpcomingClassType, ClassType, getNextLevel } from "@/lib/courseUtils"
+import { fetchUpcomingClassType, ClassType, getNextLevel, cleanStudentName } from "@/lib/courseUtils"
 import { UnlockExamDialog } from "@/components/UnlockExamDialog"
 import { ReadOnlyCalendar } from "@/components/calendar/ReadOnlyCalendar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -195,12 +195,23 @@ export default function TeacherSchedule() {
     )
 
     /* 2️⃣ Past graded history (Legacy logic) */
-    // Note: This logic might be imperfect for multi-student strings ("Alice, Bob"), 
-    // but preserving strict legacy behavior for single names is safer than breaking it.
+    // Note: Query variations of student names (cleaned, raw, and with 's class) to catch all records
+    const allQueryNames = new Set<string>();
+    studentNames.forEach(name => {
+      if (name) {
+        allQueryNames.add(name);
+        const cleaned = cleanStudentName(name);
+        if (cleaned) {
+          allQueryNames.add(cleaned);
+          allQueryNames.add(`${cleaned}'s class`);
+        }
+      }
+    });
+
     const { data: history } = await supabase
       .from("classes")
       .select("student_name, class_type, class_chapter, class_level, date, time, notes")
-      .in("student_name", studentNames)
+      .in("student_name", Array.from(allQueryNames))
       .not("class_grade", "is", null)
 
     /* 3️⃣ Enrich classes with next chapters */
@@ -209,7 +220,11 @@ export default function TeacherSchedule() {
       const studentChapters: Record<string, Partial<Record<ClassType, NextChapterInfo>>> = {};
 
       for (const student of actualStudents) {
-        const studentHistory = history?.filter(h => h.student_name === student) ?? [];
+        const sClean = cleanStudentName(student).toLowerCase();
+        const studentHistory = history?.filter(h => {
+          const hClean = cleanStudentName(h.student_name).toLowerCase();
+          return hClean === sClean || hClean.includes(sClean) || sClean.includes(hClean);
+        }) ?? [];
         const nextChapters: Partial<Record<ClassType, NextChapterInfo>> = {};
 
         for (const type of ["Grammar", "Reading", "Listening", "Club (Reading)", "Club (Listening)", "Club"] as ClassType[]) {
@@ -248,7 +263,11 @@ export default function TeacherSchedule() {
 
       const studentNotes: Record<string, string> = {}
       for (const student of actualStudents) {
-        const studentHistoryWithNotes = history?.filter(h => h.student_name === student && h.notes) ?? []
+        const sClean = cleanStudentName(student).toLowerCase();
+        const studentHistoryWithNotes = history?.filter(h => {
+          const hClean = cleanStudentName(h.student_name).toLowerCase();
+          return (hClean === sClean || hClean.includes(sClean) || sClean.includes(hClean)) && h.notes;
+        }) ?? []
         // Sort to get the most recent class with notes
         const lastClassWithNotes = studentHistoryWithNotes.sort(
             (a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`)
@@ -385,10 +404,10 @@ export default function TeacherSchedule() {
                   <h3 className="font-semibold text-lg">
                     {cls.title && cls.title.includes(' - ') 
                       ? cls.title.split(' - ')[0] 
-                      : `${cls.student_names?.length > 0 ? cls.student_names.join(', ') : cls.student_name}'s class`}
+                      : `${cls.student_names?.length > 0 ? cls.student_names.map(cleanStudentName).join(', ') : cleanStudentName(cls.student_name)}'s class`}
                   </h3>
                   <p className="text-sm font-medium text-foreground/80 my-1">
-                    Students: {cls.student_names?.join(', ') || cls.student_name}
+                    Students: {cls.student_names?.length > 0 ? cls.student_names.map(cleanStudentName).join(', ') : cleanStudentName(cls.student_name)}
                   </p>
                   <p className="text-sm text-muted-foreground flex items-center gap-1">
                     class at {format(cls._localDate, "HH:mm")}
@@ -397,13 +416,14 @@ export default function TeacherSchedule() {
 
                   <div className="mt-3 space-y-3">
                     {(cls.student_names?.length > 0 ? cls.student_names : [cls.student_name]).map((student) => {
-                      const upType = cls.upcomingClassTypes?.[student];
-                      const sChaps = cls.studentChapters?.[student] || {};
+                      const studentClean = cleanStudentName(student);
+                      const upType = cls.upcomingClassTypes?.[student] || cls.upcomingClassTypes?.[studentClean];
+                      const sChaps = cls.studentChapters?.[student] || cls.studentChapters?.[studentClean] || {};
                       const isMulti = (cls.student_names?.length || 0) > 1;
                       
                       return (
                         <div key={student} className="flex flex-col gap-1.5">
-                           {isMulti && <span className="text-xs font-semibold text-muted-foreground uppercase">{student.split(' ')[0]}</span>}
+                           {isMulti && <span className="text-xs font-semibold text-muted-foreground uppercase">{studentClean.split(' ')[0]}</span>}
                            <div className="flex flex-wrap gap-2">
                              {upType && (
                                <Badge variant={upType === 'Grammar' ? 'default' : (upType === 'Exam' ? 'destructive' : 'secondary')} className="uppercase">
@@ -428,7 +448,7 @@ export default function TeacherSchedule() {
                     <div className="mt-4 space-y-2 border-t pt-3 border-border/50">
                       {Object.entries(cls.studentNotes).map(([student, notes]) => (
                         <div key={student} className="text-sm bg-muted/50 p-3 rounded-md">
-                          <span className="font-semibold text-primary">{student.split(' ')[0]}'s last feedback:</span>
+                          <span className="font-semibold text-primary">{cleanStudentName(student).split(' ')[0]}'s last feedback:</span>
                           <p className="text-muted-foreground mt-1 whitespace-pre-wrap leading-relaxed">{notes}</p>
                         </div>
                       ))}
@@ -437,7 +457,10 @@ export default function TeacherSchedule() {
                 </div>
 
                 <div className="flex flex-col gap-2 min-w-[140px] items-end justify-center">
-                  {(cls.group_classes || []).map((studentCls: any) => (
+                  {(cls.group_classes || []).map((studentCls: any) => {
+                    const studentClean = cleanStudentName(studentCls.student_name);
+                    const studentFirst = studentClean.split(' ')[0] || studentClean;
+                    return (
                     <div key={studentCls.id} className="flex flex-col gap-2 w-full">
                       {studentCls.class_grade !== null || studentCls.is_absent ? (
                         <Link to={`/teacher/grade?class=${studentCls.id}`}>
@@ -450,19 +473,20 @@ export default function TeacherSchedule() {
                                 : "w-full border-green-600 text-green-700 hover:bg-green-50 dark:border-green-500 dark:text-green-400 dark:hover:bg-green-950/30"
                             }
                           >
-                            ✓ {studentCls.student_name.split(' ')[0]}
+                            ✓ {studentFirst}
                           </Button>
                         </Link>
                       ) : (
                         <Link to={`/teacher/grade?class=${studentCls.id}`}>
                           <Button size="sm" className="w-full">
-                            Grade {studentCls.student_name.split(' ')[0]}
+                            Grade {studentFirst}
                           </Button>
                         </Link>
                       )}
 
                       {/* EXAM UNLOCK BUTTON */}
-                      {cls.upcomingClassTypes?.[studentCls.student_name] === 'Exam' && (
+                      {(cls.upcomingClassTypes?.[studentCls.student_name] === 'Exam' || 
+                        cls.upcomingClassTypes?.[studentClean] === 'Exam') && (
                         <UnlockExamDialog 
                           studentName={studentCls.student_name} 
                           variant="destructive"
@@ -471,7 +495,8 @@ export default function TeacherSchedule() {
                         />
                       )}
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               </div>
             ))}
