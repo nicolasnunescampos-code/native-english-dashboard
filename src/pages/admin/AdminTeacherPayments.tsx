@@ -89,7 +89,7 @@ function getCustomWeeks(date: Date) {
   return weeks
 }
 
-function getWeekTargetMonday(w: { start: Date; end: Date }): string | null {
+function getWeekTargetMonday(w: { start: Date; end: Date }): string {
   // If the week contains a Monday within its date range, that is the canonical confirmation Monday
   // (e.g. for Nov 1 - Nov 8, the working week Monday is Nov 2, NOT the previous month's Oct 26)
   let cur = new Date(w.start)
@@ -101,9 +101,9 @@ function getWeekTargetMonday(w: { start: Date; end: Date }): string | null {
   }
 
   // If the week range does not contain a Monday (e.g. month starts on Thu/Fri/Sat/Sun like Oct 1 - Oct 4),
-  // return null so it does not inherit the previous month's weekly confirmation.
-  // Classes for this partial week will be accurately calculated from actual graded classes (autoWeeks).
-  return null
+  // use the week's start date (e.g. 2026-10-01) so it stays strictly within this month
+  // and never leaks into the previous month's Monday.
+  return format(w.start, 'yyyy-MM-dd')
 }
 
 export default function AdminTeacherPayments() {
@@ -391,13 +391,11 @@ export default function AdminTeacherPayments() {
         const startStr = format(w.start, 'yyyy-MM-dd')
         const endStr = format(w.end, 'yyyy-MM-dd')
 
-        const conf = targetMonday
-          ? confirmations.find(c => {
-              if (c.teacher_id !== teacher.id) return false
-              const cDate = c.week_start_date
-              return cDate === targetMonday || (cDate >= startStr && cDate <= endStr)
-            })
-          : null
+        const conf = confirmations.find(c => {
+          if (c.teacher_id !== teacher.id) return false
+          const cDate = c.week_start_date
+          return cDate === targetMonday || (cDate >= startStr && cDate <= endStr)
+        })
 
         if (conf !== undefined && conf !== null) {
           weeks[weekNum] = conf.classes_count

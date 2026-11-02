@@ -1,13 +1,36 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useSearchParams } from "react-router-dom"
 import { supabase, Teacher } from "@/lib/supabase"
 import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import { format, endOfWeek, addWeeks, subWeeks, parseISO } from "date-fns"
-import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Pencil, Copy, Database, Check, ExternalLink, ShieldAlert } from "lucide-react"
+import { 
+  format, 
+  startOfMonth, 
+  endOfMonth, 
+  endOfWeek, 
+  addDays, 
+  subDays,
+  min, 
+  parseISO, 
+  subMonths, 
+  addMonths 
+} from "date-fns"
+import { 
+  ChevronLeft, 
+  ChevronRight, 
+  CheckCircle2, 
+  XCircle, 
+  Pencil, 
+  Copy, 
+  Database, 
+  Check, 
+  ExternalLink, 
+  ShieldAlert 
+} from "lucide-react"
 import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
 import {
   Dialog,
   DialogContent,
@@ -28,6 +51,40 @@ interface ConfirmationData {
 const RLS_FIX_SQL = `ALTER TABLE public.teacher_weekly_confirmations DISABLE ROW LEVEL SECURITY;`;
 const SUPABASE_SQL_URL = `https://supabase.com/dashboard/project/ibykhkbyzifddwnsfxxy/sql/new`;
 
+// Matches custom weeks in Teacher Payments exactly
+function getCustomWeeks(date: Date) {
+  const monthStart = startOfMonth(date)
+  const monthEnd = endOfMonth(date)
+  const weeks: { start: Date; end: Date }[] = []
+  let current = monthStart
+
+  while (current <= monthEnd) {
+    const weekStart = current
+    const weekEnd = min([endOfWeek(current, { weekStartsOn: 1 }), monthEnd])
+    weeks.push({ start: weekStart, end: weekEnd })
+    current = addDays(weekEnd, 1)
+  }
+
+  if (weeks.length > 5) {
+    weeks[1].start = weeks[0].start
+    weeks.shift()
+  }
+
+  return weeks
+}
+
+// Canonical confirmation key for a week
+function getWeekTargetMonday(w: { start: Date; end: Date }): string {
+  let cur = new Date(w.start)
+  while (cur <= w.end) {
+    if (cur.getDay() === 1) { // 1 = Monday
+      return format(cur, 'yyyy-MM-dd')
+    }
+    cur = addDays(cur, 1)
+  }
+  return format(w.start, 'yyyy-MM-dd')
+}
+
 export default function AdminConfirmations() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [teachers, setTeachers] = useState<Teacher[]>([])
@@ -36,9 +93,8 @@ export default function AdminConfirmations() {
   const [copiedSql, setCopiedSql] = useState(false)
   const [showRlsDialog, setShowRlsDialog] = useState(false)
 
-  // Initialize week with URL param, or localStorage, or target week (previous completed week on Mon-Fri day)
-  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => {
-    // 1. Check if URL has ?week=YYYY-MM-DD
+  // Initialize month and week from URL param or default
+  const [currentDate, setCurrentDate] = useState<Date>(() => {
     const urlWeek = searchParams.get('week')
     if (urlWeek) {
       const parsed = parseISO(urlWeek)
@@ -46,8 +102,6 @@ export default function AdminConfirmations() {
         return parsed
       }
     }
-
-    // 2. Check localStorage
     const saved = localStorage.getItem('admin_confirmations_week')
     if (saved) {
       const parsed = parseISO(saved)
@@ -55,55 +109,85 @@ export default function AdminConfirmations() {
         return parsed
       }
     }
-
-    // 3. Smart Default: Teachers confirm the previous week until Friday night
-    const today = new Date()
-    const dayOfWeek = today.getDay()
-    const hour = today.getHours()
-    const isFridayBeforeNight = dayOfWeek === 5 && hour < 21
-    const isBeforeFridayNight = (dayOfWeek >= 1 && dayOfWeek <= 4) || isFridayBeforeNight
-
-    // Monday of current week
-    const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1)
-    const targetMonday = new Date(today.setDate(diff))
-    targetMonday.setHours(0, 0, 0, 0)
-
-    if (isBeforeFridayNight) {
-      targetMonday.setDate(targetMonday.getDate() - 7)
-    }
-
-    return targetMonday
+    return new Date()
   })
 
-  // Synchronize URL and localStorage whenever currentWeekStart changes
-  const updateWeek = (newDate: Date) => {
-    setCurrentWeekStart(newDate)
-    const dateStr = format(newDate, 'yyyy-MM-dd')
-    setSearchParams({ week: dateStr }, { replace: true })
-    localStorage.setItem('admin_confirmations_week', dateStr)
+  const monthWeeks = useMemo(() => getCustomWeeks(currentDate), [currentDate])
+
+  // Determine active week index
+  const [selectedWeekIndex, setSelectedWeekIndex] = useState<number>(() => {
+    const urlWeek = searchParams.get('week')
+    const weeks = getCustomWeeks(currentDate)
+    if (urlWeek) {
+      const idx = weeks.findIndex(w => {
+        const key = getWeekTargetMonday(w)
+        const s = format(w.start, 'yyyy-MM-dd')
+        const e = format(w.end, 'yyyy-MM-dd')
+        return key === urlWeek || (urlWeek >= s && urlWeek <= e)
+      })
+      if (idx >= 0) return idx
+    }
+    // Default: find week containing today if in same month
+    const todayStr = format(new Date(), 'yyyy-MM-dd')
+    const todayIdx = weeks.findIndex(w => {
+      const s = format(w.start, 'yyyy-MM-dd')
+      const e = format(w.end, 'yyyy-MM-dd')
+      return todayStr >= s && todayStr <= e
+    })
+    return todayIdx >= 0 ? todayIdx : 0
+  })
+
+  // Ensure selectedWeekIndex stays within bounds when month changes
+  const activeWeekIndex = Math.min(selectedWeekIndex, Math.max(0, monthWeeks.length - 1))
+  const activeWeek = monthWeeks[activeWeekIndex] || monthWeeks[0]
+  const activeWeekKey = activeWeek ? getWeekTargetMonday(activeWeek) : format(new Date(), 'yyyy-MM-dd')
+  const activeStartStr = activeWeek ? format(activeWeek.start, 'yyyy-MM-dd') : ''
+  const activeEndStr = activeWeek ? format(activeWeek.end, 'yyyy-MM-dd') : ''
+
+  // Synchronize URL and localStorage
+  const selectWeek = (idx: number) => {
+    setSelectedWeekIndex(idx)
+    const targetW = monthWeeks[idx]
+    if (targetW) {
+      const key = getWeekTargetMonday(targetW)
+      setSearchParams({ week: key }, { replace: true })
+      localStorage.setItem('admin_confirmations_week', key)
+    }
   }
 
-  const nextWeek = () => updateWeek(addWeeks(currentWeekStart, 1))
-  const prevWeek = () => updateWeek(subWeeks(currentWeekStart, 1))
+  const prevMonth = () => {
+    const nextDate = subMonths(currentDate, 1)
+    setCurrentDate(nextDate)
+    setSelectedWeekIndex(0)
+  }
+
+  const nextMonth = () => {
+    const nextDate = addMonths(currentDate, 1)
+    setCurrentDate(nextDate)
+    setSelectedWeekIndex(0)
+  }
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true)
-      
+
       // Fetch all teachers
       const { data: teachersData } = await supabase
         .from('teachers')
         .select('*')
         .order('name')
-      
+
       if (teachersData) setTeachers(teachersData)
 
-      // Fetch confirmations for current week
-      const weekStartStr = format(currentWeekStart, 'yyyy-MM-dd')
+      // Fetch confirmations for this month's range
+      const searchStart = format(subDays(startOfMonth(currentDate), 7), 'yyyy-MM-dd')
+      const searchEnd = format(addDays(endOfMonth(currentDate), 7), 'yyyy-MM-dd')
+
       const { data: confirmationsData } = await supabase
         .from('teacher_weekly_confirmations')
         .select('*')
-        .eq('week_start_date', weekStartStr)
+        .gte('week_start_date', searchStart)
+        .lte('week_start_date', searchEnd)
 
       if (confirmationsData) setConfirmations(confirmationsData)
 
@@ -111,7 +195,7 @@ export default function AdminConfirmations() {
     }
 
     fetchData()
-  }, [currentWeekStart])
+  }, [currentDate])
 
   const [editingConf, setEditingConf] = useState<string | null>(null) // teacher.id
   const [editValue, setEditValue] = useState("")
@@ -136,8 +220,13 @@ export default function AdminConfirmations() {
       return
     }
 
-    const conf = confirmations.find(c => c.teacher_id === teacherId)
-    const weekStartStr = format(currentWeekStart, 'yyyy-MM-dd')
+    // Match confirmation for active week
+    const conf = confirmations.find(c => 
+      c.teacher_id === teacherId && 
+      (c.week_start_date === activeWeekKey || (c.week_start_date >= activeStartStr && c.week_start_date <= activeEndStr))
+    )
+
+    const weekStartStr = activeWeekKey
     setIsSaving(true)
 
     try {
@@ -154,14 +243,12 @@ export default function AdminConfirmations() {
           .eq('id', conf.id)
           .select()
 
-        if (errById) {
-          throw errById
-        }
+        if (errById) throw errById
 
         if (updatedById && updatedById.length > 0) {
           savedRecord = updatedById[0]
         } else {
-          // 2. If update by ID matched 0 rows, try update by composite (teacher_id, week_start_date)
+          // 2. Try update by composite (teacher_id, week_start_date)
           const { data: updatedByTeacher, error: errByTeacher } = await supabase
             .from('teacher_weekly_confirmations')
             .update({ 
@@ -169,12 +256,10 @@ export default function AdminConfirmations() {
               confirmed_at: new Date().toISOString()
             })
             .eq('teacher_id', teacherId)
-            .eq('week_start_date', weekStartStr)
+            .eq('week_start_date', conf.week_start_date || weekStartStr)
             .select()
 
-          if (errByTeacher) {
-            throw errByTeacher
-          }
+          if (errByTeacher) throw errByTeacher
 
           if (updatedByTeacher && updatedByTeacher.length > 0) {
             savedRecord = updatedByTeacher[0]
@@ -185,7 +270,7 @@ export default function AdminConfirmations() {
               .upsert({
                 id: conf.id,
                 teacher_id: teacherId,
-                week_start_date: weekStartStr,
+                week_start_date: conf.week_start_date || weekStartStr,
                 classes_count: newCount,
                 confirmed_at: new Date().toISOString()
               }, { onConflict: 'teacher_id,week_start_date' })
@@ -215,11 +300,10 @@ export default function AdminConfirmations() {
       }
 
       if (!savedRecord) {
-        // If 0 rows were updated, Supabase RLS is blocking the UPDATE
         throw new Error('RLS_UPDATE_BLOCKED')
       }
 
-      // Update local state with the confirmed record from the database
+      // Update local state
       setConfirmations(prev => {
         const matchIndex = prev.findIndex(c => 
           (savedRecord && c.id === savedRecord.id) || 
@@ -233,7 +317,7 @@ export default function AdminConfirmations() {
         return [...prev, savedRecord!]
       })
 
-      toast.success("Classes count successfully updated and saved in database!")
+      toast.success("Classes count successfully updated and synced into Teacher Payments!")
     } catch (e: any) {
       console.error('Save confirmation error:', e)
       const isRls = 
@@ -279,18 +363,47 @@ export default function AdminConfirmations() {
             <span>Fix DB Permissions (SQL)</span>
           </Button>
 
-          <div className="flex items-center gap-2 bg-card border rounded-xl p-1 shadow-xs">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={prevWeek}>
+          {/* Month Selector matching Teacher Payments */}
+          <div className="flex items-center gap-1.5 bg-card border rounded-xl p-1 shadow-xs">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={prevMonth}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <div className="text-xs sm:text-sm font-semibold w-44 text-center">
-              {format(currentWeekStart, 'MMM d')} - {format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'MMM d, yyyy')}
+            <div className="text-xs sm:text-sm font-semibold min-w-[130px] text-center capitalize">
+              {format(currentDate, 'MMMM yyyy')}
             </div>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={nextWeek}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={nextMonth}>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         </div>
+      </div>
+
+      {/* Semana Tabs matching Teacher Payments exactly */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        {monthWeeks.map((w, idx) => {
+          const weekNum = idx + 1
+          const isSelected = activeWeekIndex === idx
+          const dateRange = `${format(w.start, 'MMM d')} - ${format(w.end, 'MMM d')}`
+
+          return (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => selectWeek(idx)}
+              className={cn(
+                "flex flex-col items-center justify-center px-4 py-2 rounded-xl border text-xs transition-all whitespace-nowrap min-w-[130px] cursor-pointer",
+                isSelected
+                  ? "bg-primary text-primary-foreground border-primary font-bold shadow-xs scale-102"
+                  : "bg-card hover:bg-muted text-muted-foreground border-border hover:border-border/80"
+              )}
+            >
+              <span className="font-semibold">Semana {weekNum}</span>
+              <span className={cn("text-[11px] mt-0.5 capitalize", isSelected ? "text-primary-foreground/90 font-medium" : "text-muted-foreground/80")}>
+                {dateRange}
+              </span>
+            </button>
+          )
+        })}
       </div>
 
       <Card>
@@ -319,7 +432,10 @@ export default function AdminConfirmations() {
                 </TableRow>
               ) : (
                 teachers.map((teacher) => {
-                  const conf = confirmations.find(c => c.teacher_id === teacher.id)
+                  const conf = confirmations.find(c => 
+                    c.teacher_id === teacher.id && 
+                    (c.week_start_date === activeWeekKey || (c.week_start_date >= activeStartStr && c.week_start_date <= activeEndStr))
+                  )
                   
                   return (
                     <TableRow key={teacher.id}>
