@@ -89,6 +89,23 @@ function getCustomWeeks(date: Date) {
   return weeks
 }
 
+function getWeekTargetMonday(w: { start: Date; end: Date }): string | null {
+  // If the week contains a Monday within its date range, that is the canonical confirmation Monday
+  // (e.g. for Nov 1 - Nov 8, the working week Monday is Nov 2, NOT the previous month's Oct 26)
+  let cur = new Date(w.start)
+  while (cur <= w.end) {
+    if (cur.getDay() === 1) { // 1 = Monday
+      return format(cur, 'yyyy-MM-dd')
+    }
+    cur = addDays(cur, 1)
+  }
+
+  // If the week range does not contain a Monday (e.g. month starts on Thu/Fri/Sat/Sun like Oct 1 - Oct 4),
+  // return null so it does not inherit the previous month's weekly confirmation.
+  // Classes for this partial week will be accurately calculated from actual graded classes (autoWeeks).
+  return null
+}
+
 export default function AdminTeacherPayments() {
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [classes, setClasses] = useState<ClassRecord[]>([])
@@ -370,15 +387,17 @@ export default function AdminTeacherPayments() {
       // Reconcile each week with confirmed count from teacher_weekly_confirmations
       monthWeeks.forEach((w, idx) => {
         const weekNum = idx + 1
-        const mondayStr = format(startOfWeek(w.start, { weekStartsOn: 1 }), 'yyyy-MM-dd')
+        const targetMonday = getWeekTargetMonday(w)
         const startStr = format(w.start, 'yyyy-MM-dd')
         const endStr = format(w.end, 'yyyy-MM-dd')
 
-        const conf = confirmations.find(c => {
-          if (c.teacher_id !== teacher.id) return false
-          const cDate = c.week_start_date
-          return cDate === mondayStr || cDate === startStr || (cDate >= mondayStr && cDate <= endStr)
-        })
+        const conf = targetMonday
+          ? confirmations.find(c => {
+              if (c.teacher_id !== teacher.id) return false
+              const cDate = c.week_start_date
+              return cDate === targetMonday || (cDate >= startStr && cDate <= endStr)
+            })
+          : null
 
         if (conf !== undefined && conf !== null) {
           weeks[weekNum] = conf.classes_count
