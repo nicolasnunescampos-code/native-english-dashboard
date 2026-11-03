@@ -120,7 +120,8 @@ export const DuolingoPracticeView: React.FC<DuolingoPracticeViewProps> = ({
                   variant="outline"
                   className="text-[10px] font-black border-slate-200 dark:border-[#37464f]"
                 >
-                  {ch.completionPercent}% Mastered
+                  <span className="hidden xs:inline">{ch.completionPercent}% Mastered</span>
+                  <span className="xs:hidden">{ch.completionPercent}%</span>
                 </Badge>
                 <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-[#203038] group-hover:bg-[#4FC3E8] group-hover:text-white transition-colors flex items-center justify-center">
                   <ArrowRight className="w-4 h-4" />

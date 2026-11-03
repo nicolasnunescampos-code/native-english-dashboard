@@ -15,7 +15,7 @@ export const DuolingoBottomNav: React.FC<DuolingoBottomNavProps> = ({
   hasQuestNotification = true,
 }) => {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 backdrop-blur-xl bg-background/95 dark:bg-[#131f24]/95 border-t border-border/80 dark:border-[#283b45] py-2 px-3 sm:px-6 transition-colors shadow-lg">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 backdrop-blur-xl bg-background/95 dark:bg-[#131f24]/95 border-t border-border/80 dark:border-[#283b45] pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] px-3 sm:px-6 transition-colors shadow-lg">
       <div className="max-w-md mx-auto flex items-center justify-around">
         {/* Tab 1: Learn / Map (Signature Duo House) */}
         <button

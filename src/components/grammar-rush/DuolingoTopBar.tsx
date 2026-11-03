@@ -56,21 +56,21 @@ export const DuolingoTopBar: React.FC<DuolingoTopBarProps> = ({
   const currentConfig = BOOK_CONFIGS[selectedBook] || BOOK_CONFIGS.Beginner;
 
   return (
-    <header className="sticky top-0 z-40 w-full backdrop-blur-xl bg-background/90 dark:bg-[#131f24]/95 border-b border-border/60 dark:border-[#283b45] transition-colors py-2.5 px-3 sm:px-6 shadow-xs">
-      <div className="max-w-3xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
+    <header className="sticky top-[52px] md:top-0 z-30 w-full backdrop-blur-xl bg-background/90 dark:bg-[#131f24]/95 border-b border-border/60 dark:border-[#283b45] transition-colors py-2 px-3 sm:px-6 shadow-xs">
+      <div className="max-w-3xl mx-auto flex items-center justify-between gap-1.5 sm:gap-4">
         {/* Book / Course Selector Dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex items-center gap-2 px-3 py-1.5 rounded-2xl border border-transparent hover:border-border dark:hover:border-[#37464f] hover:bg-muted/50 dark:hover:bg-[#1a2930] transition-all font-black text-xs sm:text-sm text-foreground active:scale-95 group focus:outline-none"
+              className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-2xl border border-transparent hover:border-border dark:hover:border-[#37464f] hover:bg-muted/50 dark:hover:bg-[#1a2930] transition-all font-black text-xs sm:text-sm text-foreground active:scale-95 group focus:outline-none shrink-0"
             >
-              <span className="text-xl leading-none">{currentConfig.flag}</span>
-              <span className="font-extrabold hidden xs:inline">{currentConfig.label}</span>
-              <span className="text-[11px] font-bold text-muted-foreground hidden sm:inline">
+              <span className="text-lg sm:text-xl leading-none">{currentConfig.flag}</span>
+              <span className="font-extrabold text-xs sm:text-sm">{currentConfig.label}</span>
+              <span className="text-[10px] sm:text-[11px] font-bold text-muted-foreground hidden sm:inline">
                 ({currentConfig.cefr})
               </span>
-              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-transform" />
+              <ChevronDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-muted-foreground group-hover:text-foreground transition-transform" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56 p-1.5 rounded-2xl dark:bg-[#18272f] dark:border-[#37464f]">
@@ -104,23 +104,23 @@ export const DuolingoTopBar: React.FC<DuolingoTopBarProps> = ({
         </DropdownMenu>
 
         {/* Center / Right Stats: Streak 🔥, Gems 💎, Hearts ❤️ */}
-        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-3 shrink-0">
           {/* Streak Flame */}
           <div
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs sm:text-sm font-black text-amber-500 dark:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-default"
+            className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-xl text-xs sm:text-sm font-black text-amber-500 dark:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-default"
             title={`${streakCount} day streak`}
           >
-            <Flame className="w-5 h-5 fill-amber-500 text-amber-500 animate-pulse" />
+            <Flame className="w-4 h-4 sm:w-5 sm:h-5 fill-amber-500 text-amber-500 animate-pulse" />
             <span>{streakCount}</span>
           </div>
 
           {/* Blue Gems / Diamonds */}
           <div
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs sm:text-sm font-black text-sky-500 dark:text-sky-400 hover:bg-sky-500/10 transition-colors cursor-default"
+            className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-xl text-xs sm:text-sm font-black text-sky-500 dark:text-sky-400 hover:bg-sky-500/10 transition-colors cursor-default"
             title={`${gemsCount.toLocaleString()} total quest points / gems`}
           >
             {/* 3D Duolingo Diamond SVG */}
-            <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 drop-shadow-xs">
+            <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 sm:w-5 sm:h-5 drop-shadow-xs">
               <path
                 d="M12 2L3 8L12 22L21 8L12 2Z"
                 fill="#1cb0f6"
@@ -136,10 +136,10 @@ export const DuolingoTopBar: React.FC<DuolingoTopBarProps> = ({
 
           {/* Hearts / Lives */}
           <div
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs sm:text-sm font-black text-rose-500 dark:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-default"
+            className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-xl text-xs sm:text-sm font-black text-rose-500 dark:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-default"
             title={`${heartsCount}/${maxHearts} hearts available`}
           >
-            <Heart className="w-5 h-5 fill-rose-500 text-rose-500 animate-pulse" />
+            <Heart className="w-4 h-4 sm:w-5 sm:h-5 fill-rose-500 text-rose-500 animate-pulse" />
             <span>{heartsCount}</span>
           </div>
 
@@ -148,13 +148,13 @@ export const DuolingoTopBar: React.FC<DuolingoTopBarProps> = ({
             <button
               type="button"
               onClick={onToggleSound}
-              className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/50 dark:hover:bg-[#1a2930] transition-colors"
+              className="p-1 sm:p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/50 dark:hover:bg-[#1a2930] transition-colors"
               title={soundEnabled ? 'Mute sound' : 'Enable sound'}
             >
               {soundEnabled ? (
-                <Volume2 className="w-4 h-4 text-emerald-500" />
+                <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500" />
               ) : (
-                <VolumeX className="w-4 h-4 text-muted-foreground" />
+                <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground" />
               )}
             </button>
           )}

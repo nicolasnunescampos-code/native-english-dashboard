@@ -64,7 +64,7 @@ export const DuolingoMap: React.FC<DuolingoMapProps> = ({
   };
 
   return (
-    <div className="w-full max-w-lg mx-auto space-y-6 pb-28 pt-1 select-none">
+    <div className="w-full max-w-lg mx-auto space-y-6 pb-28 pt-1 select-none overflow-x-hidden">
       {/* 1. Duolingo Unit Header Banner */}
       <DuolingoUnitBanner
         book={book}
@@ -86,9 +86,9 @@ export const DuolingoMap: React.FC<DuolingoMapProps> = ({
               {/* Mascot decoration 1: Mustache teacher beside chapter 2/3 (placed safely to the left) */}
               {index === 2 && (
                 <div className="w-full flex items-center justify-start my-1 px-2 pointer-events-none">
-                  <div className="flex items-center gap-2">
-                    <DuolingoTeacher className="w-24 h-24 drop-shadow-md" />
-                    <div className="bg-white dark:bg-[#141C38] border border-[#BAC9E2] dark:border-[#202E5A] p-2 rounded-2xl shadow-sm text-[11px] font-black text-foreground max-w-[120px] leading-snug">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <DuolingoTeacher className="w-16 h-16 sm:w-24 sm:h-24 drop-shadow-md" />
+                    <div className="bg-white dark:bg-[#141C38] border border-[#BAC9E2] dark:border-[#202E5A] p-1.5 sm:p-2 rounded-2xl shadow-sm text-[10px] sm:text-[11px] font-black text-foreground max-w-[100px] sm:max-w-[120px] leading-snug">
                       "Keep speaking aloud! 🎙️"
                     </div>
                   </div>
@@ -119,11 +119,11 @@ export const DuolingoMap: React.FC<DuolingoMapProps> = ({
               {/* Mascot decoration 2: Cheering Duo Owl beside chapter 7 (placed safely to the right) */}
               {index === 7 && (
                 <div className="w-full flex items-center justify-end my-1 px-2 pointer-events-none">
-                  <div className="flex items-center gap-2">
-                    <div className="bg-white dark:bg-[#141C38] border border-[#BAC9E2] dark:border-[#202E5A] p-2 rounded-2xl shadow-sm text-[11px] font-black text-foreground max-w-[120px] leading-snug">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <div className="bg-white dark:bg-[#141C38] border border-[#BAC9E2] dark:border-[#202E5A] p-1.5 sm:p-2 rounded-2xl shadow-sm text-[10px] sm:text-[11px] font-black text-foreground max-w-[100px] sm:max-w-[120px] leading-snug">
                       "Almost at the Certificate! 🎓"
                     </div>
-                    <FoxMascot mood="cheering" className="w-20 h-20 drop-shadow-md animate-duo-wiggle" />
+                    <FoxMascot mood="cheering" className="w-14 h-14 sm:w-20 sm:h-20 drop-shadow-md animate-duo-wiggle" />
                   </div>
                 </div>
               )}

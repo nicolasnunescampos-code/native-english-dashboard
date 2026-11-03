@@ -304,7 +304,7 @@ const AdminMainDashboard: React.FC = () => {
       <NativeQuestLeaderboardCard
         showSocialMediaButton={true}
         title="Native Quest Weekly Ranking (Social Media Ready)"
-        subtitle="Click 'Social Media Rank Card' on the right to open a clean weekly championship poster ready to screenshot and post!"
+        subtitle="Tap 'Social Media Rank Card' to open a clean weekly championship poster ready to screenshot and post!"
       />
 
       {/* SOURCES BREAKDOWN */}

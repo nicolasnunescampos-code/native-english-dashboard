@@ -132,9 +132,9 @@ export const CompactNativeQuestRankCard: React.FC<CompactNativeQuestRankCardProp
                       {isFirst ? '🥇' : isSecond ? '🥈' : isThird ? '🥉' : `#${entry.rank}`}
                     </span>
 
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p
-                        className="font-extrabold text-foreground truncate max-w-[170px] sm:max-w-[210px]"
+                        className="font-extrabold text-foreground truncate"
                         title={getDisplayName(entry)}
                       >
                         {getDisplayName(entry)} {entry.is_current_user && '(You)'}
@@ -170,12 +170,12 @@ export const CompactNativeQuestRankCard: React.FC<CompactNativeQuestRankCardProp
             {/* Current Student Pinned Row (if outside top 10) */}
             {currentUserEntry && !isCurrentUserInTopRanked && (
               <div className="flex items-center justify-between p-2.5 rounded-2xl bg-[#E6EEFA] dark:bg-[#161F3B] border-2 border-[#4FC3E8] text-xs font-black">
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
                   <span className="px-1.5 py-0.5 rounded-full bg-[#2B2F8F] text-white text-[10px] shrink-0 font-extrabold">
                     #{currentUserEntry.rank}
                   </span>
                   <span
-                    className="truncate max-w-[170px] sm:max-w-[210px]"
+                    className="truncate flex-1 min-w-0"
                     title={getDisplayName(currentUserEntry)}
                   >
                     {getDisplayName(currentUserEntry)} (You)

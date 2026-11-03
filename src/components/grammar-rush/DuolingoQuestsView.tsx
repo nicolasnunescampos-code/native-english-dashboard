@@ -114,7 +114,7 @@ export const DuolingoQuestsView: React.FC<DuolingoQuestsViewProps> = ({
                     {q.description}
                   </p>
                   <div className="flex items-center gap-2 pt-1">
-                    <div className="w-32 h-2.5 rounded-full bg-slate-200 dark:bg-[#1F2B52] overflow-hidden">
+                    <div className="w-24 sm:w-32 h-2.5 rounded-full bg-slate-200 dark:bg-[#1F2B52] overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${
                           isDone ? 'bg-[#4FC3E8]' : 'bg-amber-500'

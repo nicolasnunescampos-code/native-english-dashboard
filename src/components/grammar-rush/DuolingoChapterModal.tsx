@@ -46,9 +46,9 @@ export const DuolingoChapterModal: React.FC<DuolingoChapterModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md p-0 overflow-hidden rounded-3xl border-2 border-[#2B2F8F]/25 bg-white dark:bg-[#0E1428] shadow-2xl">
+      <DialogContent className="max-w-md w-[94vw] sm:w-full p-0 overflow-hidden rounded-3xl border-2 border-[#2B2F8F]/25 bg-white dark:bg-[#0E1428] shadow-2xl max-h-[92vh] flex flex-col">
         {/* Header in Brand Colors (Azul-marinho & Azul claro) */}
-        <div className="relative bg-gradient-to-r from-[#2B2F8F] via-[#353AA6] to-[#2B2F8F] text-white p-5 text-center">
+        <div className="relative bg-gradient-to-r from-[#2B2F8F] via-[#353AA6] to-[#2B2F8F] text-white p-4 sm:p-5 text-center shrink-0">
           {/* Close button */}
           <button
             type="button"
@@ -61,7 +61,7 @@ export const DuolingoChapterModal: React.FC<DuolingoChapterModalProps> = ({
           <span className="inline-block px-3 py-0.5 rounded-full bg-[#4FC3E8]/20 text-[#4FC3E8] border border-[#4FC3E8]/40 text-[10px] font-black uppercase tracking-wider mb-1">
             {book} • Chapter {chapterData.chapter}
           </span>
-          <h2 className="text-xl font-black text-white leading-snug">
+          <h2 className="text-lg sm:text-xl font-black text-white leading-snug">
             {chapterData.title}
           </h2>
           <p className="text-xs text-white/80 font-medium max-w-xs mx-auto line-clamp-1 mt-0.5">
@@ -70,7 +70,7 @@ export const DuolingoChapterModal: React.FC<DuolingoChapterModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-5 space-y-4">
+        <div className="p-4 sm:p-5 space-y-3.5 sm:space-y-4 overflow-y-auto">
           {/* Progress & Personal Best Card */}
           <div className="rounded-2xl bg-[#E6EEFA]/60 dark:bg-[#141C38] p-3.5 space-y-2 border border-[#BAC9E2]/50 dark:border-transparent">
             <div className="flex items-center justify-between text-xs font-bold">

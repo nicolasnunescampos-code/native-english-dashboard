@@ -84,7 +84,7 @@ export const DuolingoGuidebookModal: React.FC<DuolingoGuidebookModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg p-0 overflow-hidden rounded-3xl border-2 border-slate-200 dark:border-[#37464f] bg-white dark:bg-[#18272f]">
+      <DialogContent className="max-w-lg w-[94vw] sm:w-full p-0 overflow-hidden rounded-3xl border-2 border-slate-200 dark:border-[#37464f] bg-white dark:bg-[#18272f] max-h-[92vh] flex flex-col">
         {/* Brand Native English Navy Header Banner (#2B2F8F) */}
         <div className="bg-gradient-to-r from-[#2B2F8F] via-[#353AA6] to-[#2B2F8F] text-white p-5 shadow-[0_4px_0_#1C2068] border-b-2 border-[#4FC3E8]">
           <div className="flex items-center gap-2 text-[#4FC3E8] text-xs font-black uppercase tracking-wider mb-1">

@@ -575,8 +575,9 @@ export default function StudentGrammarRush() {
     );
 
     return (
-      <div className="max-w-md mx-auto space-y-4 pb-28 pt-2 select-none">
-        {/* Top Game Bar in Brand Styling */}
+      <div className="fixed inset-0 z-50 bg-background/98 dark:bg-[#0c1322]/98 backdrop-blur-md overflow-y-auto px-3 sm:px-4 py-3 sm:py-4 select-none animate-in fade-in duration-200">
+        <div className="max-w-md mx-auto space-y-4 pb-24">
+          {/* Top Game Bar in Brand Styling */}
         <div className="flex items-center justify-between gap-3 px-2">
           {/* Circular 'X' Exit Button */}
           <button
@@ -684,6 +685,7 @@ export default function StudentGrammarRush() {
             </div>
           </div>
         )}
+        </div>
       </div>
     );
   }
@@ -831,7 +833,7 @@ export default function StudentGrammarRush() {
       />
 
       {/* 2. Main Layout Content (Balanced 2-Column on Desktop, Single-column on Mobile) */}
-      <main className="px-3 pt-3 max-w-6xl mx-auto">
+      <main className="px-3 pt-3 max-w-6xl mx-auto overflow-x-hidden">
         {activeTab === 'learn' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             {/* LEFT / CENTER COLUMN: The Serpentine Winding Map */}

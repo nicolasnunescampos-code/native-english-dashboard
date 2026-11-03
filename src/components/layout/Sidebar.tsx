@@ -493,13 +493,16 @@ export const Sidebar: React.FC = () => {
 
   return (
     <>
-      {/* Mobile floating glass top bar */}
-      <div className="md:hidden sticky top-3 z-40 mx-3 mt-3 flex items-center justify-between px-4 py-3 rounded-2xl liquid-glass-sidebar">
+      {/* Mobile edge-to-edge frosted glass top bar */}
+      <div className="md:hidden sticky top-0 z-40 w-full flex items-center justify-between px-4 py-2.5 backdrop-blur-xl bg-background/90 dark:bg-[#0c1322]/90 border-b border-white/20 dark:border-white/10 shadow-xs">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-sky-500/20 border border-sky-300/60 flex items-center justify-center shadow-sm">
             <span className="text-sky-600 dark:text-sky-300 font-bold text-xs">NE</span>
           </div>
-          <span className="font-bold text-sm tracking-tight">Native English</span>
+          <div className="flex flex-col">
+            <span className="font-bold text-sm tracking-tight leading-none text-foreground">Native English</span>
+            <span className="text-[10px] text-muted-foreground font-medium">{dashboardLabel}</span>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <ModeToggle />
@@ -508,6 +511,7 @@ export const Sidebar: React.FC = () => {
             size="icon"
             className="w-9 h-9 rounded-full liquid-glass-pill"
             onClick={() => setOpen(true)}
+            aria-label="Open navigation menu"
           >
             <Menu className="h-4 w-4" />
           </Button>

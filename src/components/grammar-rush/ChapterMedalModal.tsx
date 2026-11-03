@@ -44,7 +44,7 @@ export const ChapterMedalModal: React.FC<ChapterMedalModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md p-0 overflow-hidden rounded-3xl border-2 border-[#2B2F8F]/30 bg-white dark:bg-[#0E1428] shadow-2xl">
+      <DialogContent className="max-w-md w-[94vw] sm:w-full p-0 overflow-hidden rounded-3xl border-2 border-[#2B2F8F]/30 bg-white dark:bg-[#0E1428] shadow-2xl max-h-[92vh] overflow-y-auto">
         {/* Certificate / Medal Header */}
         <div className="relative bg-gradient-to-br from-[#2B2F8F] via-[#212470] to-[#161952] text-white p-6 text-center overflow-hidden">
           {/* Decorative Corner Seals */}

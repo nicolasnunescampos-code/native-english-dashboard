@@ -152,7 +152,7 @@ const AppRoutes = () => {
       <Route path="/student/exams/:id" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout hideHeader={true}><ExamRoom /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/buddy" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentBuddy /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/speaking" element={<Navigate to="/student/grammar-rush" replace />} />
-      <Route path="/student/grammar-rush" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout><StudentGrammarRush /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/student/grammar-rush" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout hideHeader={true}><StudentGrammarRush /></DashboardLayout></ProtectedRoute>} />
 
       {/* Teacher Routes */}
       <Route path="/teacher" element={<ProtectedRoute allowedRoles={['teacher']}><DashboardLayout><TeacherDashboard /></DashboardLayout></ProtectedRoute>} />

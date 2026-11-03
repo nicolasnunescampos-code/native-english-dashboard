@@ -33,7 +33,7 @@ export const FullCertificateModal: React.FC<FullCertificateModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl p-0 overflow-hidden rounded-3xl border-4 border-[#2B2F8F] bg-white dark:bg-[#0E1428] shadow-2xl">
+      <DialogContent className="max-w-2xl w-[94vw] sm:w-full p-0 overflow-hidden rounded-3xl border-2 sm:border-4 border-[#2B2F8F] bg-white dark:bg-[#0E1428] shadow-2xl max-h-[92vh] overflow-y-auto">
         {/* Decorative Top Banner */}
         <div className="relative bg-gradient-to-r from-[#2B2F8F] via-[#373BB0] to-[#2B2F8F] text-white p-6 sm:p-8 text-center border-b-4 border-[#4FC3E8]">
           {/* Close button */}
