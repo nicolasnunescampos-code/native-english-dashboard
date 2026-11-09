@@ -34,6 +34,7 @@ import { NativeQuestLeaderboardCard } from '@/components/grammar-rush/NativeQues
 import { playNativeSpeech } from '@/utils/speechEvaluator';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
+import { formatLastLogin } from '@/lib/dateUtils';
 import {
   ArrowLeft,
   Award,
@@ -54,6 +55,7 @@ import {
   Zap,
   Trophy,
   Flame,
+  LogIn,
 } from 'lucide-react';
 
 /* ---------------------------------------------
@@ -65,6 +67,8 @@ type StudentRow = {
   student_name: string;
   email?: string;
   course_type?: string;
+  last_login_at?: string | null;
+  last_active_at?: string | null;
   classes_completed?: number;
   nq_sessions?: number;
   nq_best_score?: number;
@@ -159,6 +163,7 @@ export default function TeacherStudents() {
   const [speakingAttempts, setSpeakingAttempts] = useState<SpeakingAttempt[]>([]);
   const [grammarSessions, setGrammarSessions] = useState<GrammarGameSession[]>([]);
   const [grammarQuestionsLookup, setGrammarQuestionsLookup] = useState<Record<string, { sentence: string; correct_sentence: string; explanation: string }>>({});
+  const [studentLastLogin, setStudentLastLogin] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Exam Inspection Modal State
@@ -189,7 +194,7 @@ export default function TeacherStudents() {
       const [studentsRes, classesRes, nqSessionsRes, speakingRes] = await Promise.all([
         supabase
           .from('students')
-          .select('id, student_name, email, course_type')
+          .select('*')
           .eq('status', 'active'),
         supabase
           .from('classes')
@@ -199,10 +204,10 @@ export default function TeacherStudents() {
           ),
         supabase
           .from('grammar_game_sessions')
-          .select('student_id, student_name, book, chapter, score, accuracy, best_combo'),
+          .select('student_id, student_name, book, chapter, score, accuracy, best_combo, created_at'),
         supabase
           .from('student_speaking_attempts')
-          .select('student_id, student_name, score'),
+          .select('student_id, student_name, score, created_at'),
       ]);
 
       if (studentsRes.error) {
@@ -280,11 +285,34 @@ export default function TeacherStudents() {
                 )
               : 0;
 
+          // Determine student's last login / activity timestamp
+          let lastActive: string | null = s.last_login_at || null;
+          if (!lastActive) {
+            const timestamps: number[] = [];
+            stuNq.forEach((sess: any) => {
+              if (sess.created_at) {
+                const t = new Date(sess.created_at).getTime();
+                if (!isNaN(t)) timestamps.push(t);
+              }
+            });
+            stuSpeak.forEach((att: any) => {
+              if (att.created_at) {
+                const t = new Date(att.created_at).getTime();
+                if (!isNaN(t)) timestamps.push(t);
+              }
+            });
+            if (timestamps.length > 0) {
+              lastActive = new Date(Math.max(...timestamps)).toISOString();
+            }
+          }
+
           return {
             id: s.id,
             student_name: s.student_name,
             email: s.email,
             course_type: s.course_type,
+            last_login_at: s.last_login_at || null,
+            last_active_at: lastActive,
             classes_completed: stuClasses.length,
             nq_sessions: nqSessionsCount,
             nq_best_score: nqBestScore,
@@ -317,7 +345,7 @@ export default function TeacherStudents() {
       // 1. Fetch Student Record
       const { data: stuData } = await supabase
         .from('students')
-        .select('id, student_name, email, course_type')
+        .select('*')
         .ilike('student_name', studentName.trim())
         .maybeSingle();
 
@@ -388,6 +416,39 @@ export default function TeacherStudents() {
 
       const loadedGrammarSessions = ((grammarRes.data || []) as GrammarGameSession[]);
       setGrammarSessions(loadedGrammarSessions);
+
+      // Determine student's last login
+      let resolvedLastLogin: string | null = (stuData as any)?.last_login_at || null;
+      if (!resolvedLastLogin) {
+        const timestamps: number[] = [];
+        const loadedNq = (grammarRes.data as any[]) || [];
+        const loadedSpeak = (speakingRes.data as any[]) || [];
+        const loadedExams = (examsRes.data as any[]) || [];
+
+        loadedNq.forEach((sess) => {
+          if (sess.created_at) {
+            const t = new Date(sess.created_at).getTime();
+            if (!isNaN(t)) timestamps.push(t);
+          }
+        });
+        loadedSpeak.forEach((att) => {
+          if (att.created_at) {
+            const t = new Date(att.created_at).getTime();
+            if (!isNaN(t)) timestamps.push(t);
+          }
+        });
+        loadedExams.forEach((sub) => {
+          if (sub.created_at) {
+            const t = new Date(sub.created_at).getTime();
+            if (!isNaN(t)) timestamps.push(t);
+          }
+        });
+
+        if (timestamps.length > 0) {
+          resolvedLastLogin = new Date(Math.max(...timestamps)).toISOString();
+        }
+      }
+      setStudentLastLogin(resolvedLastLogin);
 
       // Look up question details for any mistake question_ids if not embedded
       const mistakeIds = Array.from(
@@ -806,6 +867,15 @@ export default function TeacherStudents() {
                               {s.course_type || 'Native English'} • {s.classes_completed || 0}/
                               {TOTAL_COURSE_CLASSES} classes ({coursePct}%)
                             </p>
+                            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-0.5">
+                              <LogIn className="w-3 h-3 text-emerald-500 shrink-0" />
+                              <span>
+                                Last login:{' '}
+                                <strong className="text-foreground font-semibold">
+                                  {formatLastLogin(s.last_login_at || s.last_active_at).relative}
+                                </strong>
+                              </span>
+                            </div>
                           </div>
                         </div>
                         <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0" />
@@ -893,6 +963,8 @@ export default function TeacherStudents() {
     Math.round((grammarStats.chaptersPracticedCount / 30) * 100)
   );
 
+  const lastLoginInfo = formatLastLogin(studentLastLogin);
+
   return (
     <div className="space-y-6 pb-12 animate-fade-in">
       {/* Top Navigation & Actions */}
@@ -936,6 +1008,44 @@ export default function TeacherStudents() {
               <p className="text-xs sm:text-sm text-muted-foreground">
                 {classesCompletedCount} of {TOTAL_COURSE_CLASSES} classes completed ({progressPercentage}% of full course)
               </p>
+
+              {/* Student Last Login Info */}
+              <div className="pt-1.5 flex items-center gap-2 flex-wrap">
+                <div
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border shadow-xs transition-all",
+                    lastLoginInfo.isRecent
+                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800/60"
+                      : lastLoginInfo.relative === 'Never logged in'
+                        ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-300 dark:border-amber-800/60"
+                        : "bg-muted/70 text-muted-foreground border-border"
+                  )}
+                  title={lastLoginInfo.exact}
+                >
+                  <span
+                    className={cn(
+                      "w-2 h-2 rounded-full",
+                      lastLoginInfo.isRecent
+                        ? "bg-emerald-500 animate-pulse"
+                        : lastLoginInfo.relative === 'Never logged in'
+                          ? "bg-amber-500"
+                          : "bg-muted-foreground/60"
+                    )}
+                  />
+                  <LogIn className="w-3.5 h-3.5 text-inherit" />
+                  <span>
+                    Last Login:{' '}
+                    <strong className="font-bold">
+                      {lastLoginInfo.relative}
+                    </strong>
+                  </span>
+                  {lastLoginInfo.relative !== 'Never logged in' && (
+                    <span className="text-[11px] opacity-75 font-normal ml-1 hidden sm:inline">
+                      ({lastLoginInfo.exact})
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 

@@ -33,6 +33,13 @@ const Auth: React.FC = () => {
       } else if (role === 'teacher') {
         navigate('/teacher', { replace: true });
       } else if (role === 'student') {
+        if (data.session?.user?.id) {
+          supabase
+            .from('students')
+            .update({ last_login_at: new Date().toISOString() })
+            .eq('id', data.session.user.id)
+            .then(() => {});
+        }
         navigate('/student', { replace: true });
       } else {
         navigate('/login', { replace: true });
@@ -97,6 +104,13 @@ const Auth: React.FC = () => {
       } else if (role === 'teacher') {
         navigate('/teacher', { replace: true });
       } else if (role === 'student') {
+        if (data.session?.user?.id) {
+          supabase
+            .from('students')
+            .update({ last_login_at: new Date().toISOString() })
+            .eq('id', data.session.user.id)
+            .then(() => {});
+        }
         navigate('/student', { replace: true });
       } else {
         // invalid or missing role

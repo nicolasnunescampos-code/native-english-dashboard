@@ -21,8 +21,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { Pencil, Trash2, History, Trophy, Medal, Zap, GraduationCap, Clock } from "lucide-react"
+import { Pencil, Trash2, History, Trophy, Medal, Zap, GraduationCap, Clock, LogIn } from "lucide-react"
 import { format, parseISO } from "date-fns"
+import { formatLastLogin } from "@/lib/dateUtils"
 
 interface StudentProgressSummary {
   classes_completed: number
@@ -50,6 +51,7 @@ interface Student {
   course_type?: 'Native English' | 'Conversation Club'
   source?: string | null
   referred_by?: string | null
+  last_login_at?: string | null
 }
 
 const AdminStudents: React.FC = () => {
@@ -612,14 +614,18 @@ const AdminStudents: React.FC = () => {
                       </Badge>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <span className={`text-xs font-semibold px-2 py-1 rounded-full ${student.rules_agreed ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                      <span className={`text-xs font-semibold px-2 py-1 rounded-full ${student.rules_agreed ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-300'}`}>
                         {student.rules_agreed ? 'Rules: Agreed ✅' : 'Rules: Pending ⏳'}
                       </span>
                       {student.status === 'stopped' && (
-                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-700">
+                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300">
                           Stopped 🛑
                         </span>
                       )}
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-muted border border-border text-foreground flex items-center gap-1.5" title={formatLastLogin(student.last_login_at || prog.nq_last_accessed).exact}>
+                        <LogIn className="w-3 h-3 text-sky-500" />
+                        Last login: <strong>{formatLastLogin(student.last_login_at || prog.nq_last_accessed).relative}</strong>
+                      </span>
                     </div>
                   </div>
 

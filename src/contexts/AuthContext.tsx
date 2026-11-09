@@ -60,6 +60,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setStudentName(name);
       setStudentId(studentData?.id ?? null);
       setRulesAgreed(studentData?.rules_agreed ?? false);
+
+      // Record student's last login in the platform
+      if (studentData?.id) {
+        supabase
+          .from('students')
+          .update({ last_login_at: new Date().toISOString() })
+          .eq('id', studentData.id)
+          .then(({ error: updateErr }) => {
+            if (updateErr) {
+              // Silently ignore if column doesn't exist yet
+              console.debug('last_login_at sync:', updateErr.message);
+            }
+          });
+      }
+
       return name;
     } catch (error) {
       console.error('Error fetching student params:', error);

@@ -82,3 +82,56 @@ export const getUserTimeZone = (): string => {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 };
 
+/**
+ * Formats a student's last login / activity timestamp into both a friendly relative string
+ * and an exact localized timestamp.
+ */
+export const formatLastLogin = (dateInput?: string | number | Date | null): {
+  relative: string;
+  exact: string;
+  isRecent: boolean;
+} => {
+  if (!dateInput) {
+    return {
+      relative: 'Never logged in',
+      exact: 'No platform login recorded yet',
+      isRecent: false,
+    };
+  }
+
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) {
+    return {
+      relative: 'Never logged in',
+      exact: 'No platform login recorded yet',
+      isRecent: false,
+    };
+  }
+
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  const isRecent = diffHours < 48; // Active in last 48h
+  const exact = format(d, "MMM d, yyyy 'at' HH:mm");
+
+  if (diffMins < 1) {
+    return { relative: 'Just now', exact, isRecent: true };
+  }
+  if (diffMins < 60) {
+    return { relative: `${diffMins} min${diffMins > 1 ? 's' : ''} ago`, exact, isRecent: true };
+  }
+  if (diffHours < 24 && d.getDate() === now.getDate()) {
+    return { relative: `Today at ${format(d, 'HH:mm')}`, exact, isRecent: true };
+  }
+  if (diffHours < 48) {
+    return { relative: `Yesterday at ${format(d, 'HH:mm')}`, exact, isRecent: true };
+  }
+  if (diffDays < 7) {
+    return { relative: `${diffDays} days ago (${format(d, 'EEE')})`, exact, isRecent: false };
+  }
+  return { relative: format(d, 'MMM d, yyyy'), exact, isRecent: false };
+};
+

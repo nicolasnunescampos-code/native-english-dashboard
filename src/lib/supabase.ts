@@ -22,6 +22,8 @@ export interface Student {
   cpf?: string;
   schedule_preference?: string;
   course_type?: 'Native English' | 'Conversation Club' | 'Business English';
+  last_login_at?: string | null;
+  status?: 'active' | 'stopped';
 }
 
 
