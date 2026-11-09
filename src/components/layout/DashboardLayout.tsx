@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar'
 import { useAuth } from '@/contexts/AuthContext'
 import { FeedbackPopup } from '@/components/FeedbackPopup'
 import { TeacherWeeklyConfirmationBlocker } from '@/components/TeacherWeeklyConfirmationBlocker'
+import { TeacherPendingGradeBlocker } from '@/components/teacher/TeacherPendingGradeBlocker'
 import { AdminLeadNotifier } from '@/components/AdminLeadNotifier'
 import { StudentNotifier } from '@/components/student/StudentNotifier'
 import { TeacherNotifier } from '@/components/teacher/TeacherNotifier'
@@ -83,6 +84,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       
       {/* Popups and Blocker Modals that trigger conditionally */}
       <FeedbackPopup />
+      <TeacherPendingGradeBlocker />
       <TeacherWeeklyConfirmationBlocker />
       {role === 'admin' && <AdminLeadNotifier />}
       {role === 'student' && <StudentNotifier />}

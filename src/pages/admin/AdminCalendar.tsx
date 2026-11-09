@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
+import { getContrastTextColor } from '@/lib/utils';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
 
@@ -42,15 +43,20 @@ interface CalendarClassEvent extends CalendarEvent {
 import { EventProps } from 'react-big-calendar';
 
 const CustomEvent = ({ event }: EventProps<CalendarClassEvent>) => {
+    const color = event.resource?.color || '#3788d8';
+    const textColor = getContrastTextColor(color);
+    const isDarkText = textColor === '#0f172a';
+
     return (
         <div 
             className="h-full w-full flex flex-col justify-start overflow-hidden p-0.5" 
+            style={{ color: textColor }}
             title={`${event.title}\n${format(event.start!, 'h:mm a')} - ${format(event.end!, 'h:mm a')}`}
         >
-            <div className="font-semibold text-[9px] sm:text-[10px] leading-[1.1] line-clamp-3 break-words">
+            <div className={`font-bold text-[9px] sm:text-[10px] leading-[1.1] line-clamp-3 break-words ${isDarkText ? 'text-slate-950 font-black drop-shadow-xs' : 'text-white'}`}>
                 {event.title}
             </div>
-            <div className="text-[8px] sm:text-[9px] opacity-90 leading-none mt-0.5 truncate">
+            <div className={`text-[8px] sm:text-[9px] leading-none mt-0.5 truncate ${isDarkText ? 'text-slate-900 font-bold opacity-90' : 'text-white/90'}`}>
                 {format(event.start!, 'h:mm a')}
             </div>
         </div>
@@ -1080,12 +1086,7 @@ const AdminCalendar: React.FC = () => {
     const eventStyleGetter = (event: CalendarClassEvent) => {
         const cls = event.resource as any;
         const color = cls.color || '#3788d8';
-
-        // Check if teacher is Bruno
-        const teacher = teachers.find(t => t.id === cls.teacher_id);
-        // Fallback to checking title if teacher not found (legacy data)
-        const isBruno = teacher?.name?.toLowerCase().includes('bruno') ||
-            (!teacher && cls.title?.toLowerCase().includes('bruno'));
+        const textColor = getContrastTextColor(color);
 
         // Check if matches search
         const isMatch = !searchQuery || 
@@ -1098,7 +1099,7 @@ const AdminCalendar: React.FC = () => {
                 borderRadius: '4px',
                 opacity: isMatch ? 1 : 0.3,
                 border: isMatch && searchQuery ? '2px solid black' : 'none',
-                color: isBruno ? 'black' : 'white',
+                color: textColor,
                 display: 'block',
                 boxShadow: isMatch && searchQuery ? '0 0 5px rgba(0,0,0,0.5)' : 'none'
             }
@@ -1117,10 +1118,10 @@ const AdminCalendar: React.FC = () => {
                         placeholder="Search student or class..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-48 bg-white"
+                        className="w-48 bg-background"
                     />
                     {teachers.length === 0 && !loading && (
-                        <Button variant="outline" onClick={initializeTeachers} className="border-yellow-500 text-yellow-600 hover:bg-yellow-50">
+                        <Button variant="outline" onClick={initializeTeachers} className="border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950/30">
                             ⚠ Initialize Teachers
                         </Button>
                     )}

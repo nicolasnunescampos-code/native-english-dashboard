@@ -223,7 +223,9 @@ export default function TeacherSchedule() {
         const sClean = cleanStudentName(student).toLowerCase();
         const studentHistory = history?.filter(h => {
           const hClean = cleanStudentName(h.student_name).toLowerCase();
-          return hClean === sClean || hClean.includes(sClean) || sClean.includes(hClean);
+          if (hClean === sClean) return true;
+          const groupNames = hClean.split(/,| and /).map(x => x.trim());
+          return groupNames.includes(sClean);
         }) ?? [];
         const nextChapters: Partial<Record<ClassType, NextChapterInfo>> = {};
 
@@ -266,7 +268,8 @@ export default function TeacherSchedule() {
         const sClean = cleanStudentName(student).toLowerCase();
         const studentHistoryWithNotes = history?.filter(h => {
           const hClean = cleanStudentName(h.student_name).toLowerCase();
-          return (hClean === sClean || hClean.includes(sClean) || sClean.includes(hClean)) && h.notes;
+          const matches = hClean === sClean || hClean.split(/,| and /).map(x => x.trim()).includes(sClean);
+          return matches && h.notes;
         }) ?? []
         // Sort to get the most recent class with notes
         const lastClassWithNotes = studentHistoryWithNotes.sort(

@@ -554,7 +554,7 @@ const AdminStudents: React.FC = () => {
             placeholder="Search students..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full sm:w-64 bg-white"
+            className="w-full sm:w-64 bg-background"
           />
           <label className="flex items-center gap-2 text-sm font-medium cursor-pointer text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap">
             <input 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { format, startOfWeek, endOfWeek } from 'date-fns';
+import { format, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
 import { GrammarBookLevel } from '@/lib/supabase';
 import { useGrammarLeaderboard } from '@/hooks/useGrammarRush';
 import { useAuth } from '@/contexts/AuthContext';
@@ -29,7 +29,7 @@ import {
 
 interface NativeQuestLeaderboardCardProps {
   defaultBook?: GrammarBookLevel | 'ALL';
-  defaultTimeframe?: 'week' | 'all_time';
+  defaultTimeframe?: 'week' | 'previous_week' | 'all_time';
   chapter?: string;
   showPlayButton?: boolean;
   showSocialMediaButton?: boolean;
@@ -50,7 +50,7 @@ export const NativeQuestLeaderboardCard: React.FC<NativeQuestLeaderboardCardProp
 }) => {
   const { studentName } = useAuth();
   const [selectedBook, setSelectedBook] = useState<GrammarBookLevel | 'ALL'>(defaultBook);
-  const [timeframe, setTimeframe] = useState<'week' | 'all_time'>(defaultTimeframe);
+  const [timeframe, setTimeframe] = useState<'week' | 'previous_week' | 'all_time'>(defaultTimeframe);
   const [socialModalOpen, setSocialModalOpen] = useState(false);
 
   const { data: leaderboard = [], isLoading } = useGrammarLeaderboard(
@@ -60,9 +60,17 @@ export const NativeQuestLeaderboardCard: React.FC<NativeQuestLeaderboardCardProp
   );
 
   const now = new Date();
-  const weekStart = startOfWeek(now, { weekStartsOn: 1 });
-  const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
-  const weekRangeLabel = `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
+  const currentWeekStart = startOfWeek(now, { weekStartsOn: 1 });
+  const currentWeekEnd = endOfWeek(now, { weekStartsOn: 1 });
+
+  const prevWeekDate = subWeeks(now, 1);
+  const prevWeekStart = startOfWeek(prevWeekDate, { weekStartsOn: 1 });
+  const prevWeekEnd = endOfWeek(prevWeekDate, { weekStartsOn: 1 });
+
+  const weekRangeLabel =
+    timeframe === 'previous_week'
+      ? `${format(prevWeekStart, 'MMM d')} – ${format(prevWeekEnd, 'MMM d, yyyy')}`
+      : `${format(currentWeekStart, 'MMM d')} – ${format(currentWeekEnd, 'MMM d, yyyy')}`;
 
   const topThree = [
     leaderboard.find((e) => e.rank === 1) || leaderboard[0],
@@ -255,7 +263,15 @@ export const NativeQuestLeaderboardCard: React.FC<NativeQuestLeaderboardCardProp
                     className="bg-white/5 text-slate-300 border-white/15 text-[10px] sm:text-[11px] px-2 sm:px-2.5 py-0.5"
                   >
                     <Calendar className="h-3 w-3 mr-1 text-indigo-400" />
-                    Week of {weekRangeLabel}
+                    This Week • {weekRangeLabel}
+                  </Badge>
+                ) : timeframe === 'previous_week' ? (
+                  <Badge
+                    variant="outline"
+                    className="bg-amber-500/15 text-amber-300 border-amber-500/40 text-[10px] sm:text-[11px] px-2 sm:px-2.5 py-0.5 font-bold"
+                  >
+                    <Calendar className="h-3 w-3 mr-1 text-amber-400" />
+                    Previous Week • {weekRangeLabel}
                   </Badge>
                 ) : (
                   <Badge
@@ -326,11 +342,11 @@ export const NativeQuestLeaderboardCard: React.FC<NativeQuestLeaderboardCardProp
               ))}
             </div>
 
-            <div className="flex items-center gap-1 bg-slate-950/70 p-1 rounded-lg border border-white/10 self-start sm:self-auto shrink-0">
+            <div className="flex items-center gap-1 bg-slate-950/70 p-1 rounded-lg border border-white/10 self-start sm:self-auto shrink-0 overflow-x-auto max-w-full">
               <button
                 type="button"
                 onClick={() => setTimeframe('week')}
-                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                   timeframe === 'week'
                     ? 'bg-indigo-600 text-white shadow font-extrabold'
                     : 'text-slate-400 hover:text-white'
@@ -340,8 +356,19 @@ export const NativeQuestLeaderboardCard: React.FC<NativeQuestLeaderboardCardProp
               </button>
               <button
                 type="button"
+                onClick={() => setTimeframe('previous_week')}
+                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                  timeframe === 'previous_week'
+                    ? 'bg-amber-600 text-white shadow font-extrabold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                ⏪ Previous Week
+              </button>
+              <button
+                type="button"
                 onClick={() => setTimeframe('all_time')}
-                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                   timeframe === 'all_time'
                     ? 'bg-indigo-600 text-white shadow font-extrabold'
                     : 'text-slate-400 hover:text-white'
@@ -363,12 +390,16 @@ export const NativeQuestLeaderboardCard: React.FC<NativeQuestLeaderboardCardProp
               <Trophy className="h-8 w-8 sm:h-10 sm:w-10 text-amber-400/50 mx-auto" />
               <div>
                 <p className="text-sm sm:text-base font-bold text-white">
-                  The {timeframe === 'week' ? 'Weekly' : 'All-Time'} Podium is Wide Open!
+                  {timeframe === 'week'
+                    ? 'The Weekly Podium is Wide Open!'
+                    : timeframe === 'previous_week'
+                    ? 'No Scores Recorded for Previous Week'
+                    : 'The All-Time Podium is Wide Open!'}
                 </p>
                 <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
-                  No scores recorded yet for {selectedBook === 'ALL' ? 'any level' : selectedBook}{' '}
-                  {timeframe === 'week' ? 'this week' : ''}. Be the first to play and claim the #1
-                  Champion spot!
+                  {timeframe === 'previous_week'
+                    ? `No completed sessions found for ${selectedBook === 'ALL' ? 'any level' : selectedBook} between ${weekRangeLabel}.`
+                    : `No scores recorded yet for ${selectedBook === 'ALL' ? 'any level' : selectedBook}${timeframe === 'week' ? ' this week' : ''}. Be the first to play and claim the #1 Champion spot!`}
                 </p>
               </div>
               {showPlayButton && (
@@ -507,7 +538,11 @@ export const NativeQuestLeaderboardCard: React.FC<NativeQuestLeaderboardCardProp
               <div className="text-center space-y-1 sm:space-y-1.5 border-b border-white/10 pb-3 sm:pb-4">
                 <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] sm:text-xs font-extrabold tracking-wider uppercase">
                   <Trophy className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-400" />
-                  {timeframe === 'week' ? `WEEKLY RANKING • ${weekRangeLabel}` : 'ALL-TIME RANKING'}
+                  {timeframe === 'week'
+                    ? `WEEKLY RANKING • ${weekRangeLabel}`
+                    : timeframe === 'previous_week'
+                    ? `PREVIOUS WEEK RANKING • ${weekRangeLabel}`
+                    : 'ALL-TIME RANKING'}
                 </div>
                 <h2 className="text-xl sm:text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-orange-400">
                   NATIVE QUEST CHAMPIONS

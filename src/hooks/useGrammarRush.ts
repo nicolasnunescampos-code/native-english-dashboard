@@ -9,7 +9,7 @@ import {
   GrammarQuestionType,
   GrammarRushLeaderboardEntry,
 } from '@/lib/supabase';
-import { startOfWeek } from 'date-fns';
+import { startOfWeek, endOfWeek, subWeeks } from 'date-fns';
 import { toast } from 'sonner';
 import { ALL_CHAPTERS_BUILT_IN_QUESTIONS } from '@/data/grammarRushCurriculum';
 
@@ -302,22 +302,133 @@ export function useStudentGrammarSessions(studentId?: string | null) {
 export function useGrammarLeaderboard(
   book: GrammarBookLevel | 'ALL' = 'ALL',
   chapter: string = 'all',
-  timeframe: 'week' | 'all_time' = 'week'
+  timeframe: 'week' | 'previous_week' | 'all_time' = 'week'
 ) {
   return useQuery({
     queryKey: ['grammar_rush', 'leaderboard', book, chapter, timeframe],
     queryFn: async () => {
-      const weekStartIso =
-        timeframe === 'week'
-          ? startOfWeek(new Date(), { weekStartsOn: 1 }).toISOString()
-          : null;
+      let weekStartIso: string | null = null;
+      let weekEndIso: string | null = null;
+
+      if (timeframe === 'week') {
+        weekStartIso = startOfWeek(new Date(), { weekStartsOn: 1 }).toISOString();
+      } else if (timeframe === 'previous_week') {
+        const prev = subWeeks(new Date(), 1);
+        weekStartIso = startOfWeek(prev, { weekStartsOn: 1 }).toISOString();
+        weekEndIso = endOfWeek(prev, { weekStartsOn: 1 }).toISOString();
+      }
 
       const fetchBookRank = async (b: GrammarBookLevel) => {
-        const { data, error } = await supabase.rpc('get_grammar_rush_leaderboard', {
+        // Try calling RPC with optional p_week_end if previous_week
+        let rpcParams: Record<string, unknown> = {
           p_book: b,
           p_chapter: chapter === 'all' ? null : chapter,
           p_week_start: weekStartIso,
-        });
+        };
+        if (weekEndIso) {
+          rpcParams.p_week_end = weekEndIso;
+        }
+
+        let { data, error } = await supabase.rpc('get_grammar_rush_leaderboard', rpcParams);
+
+        // Fallback if RPC doesn't have p_week_end deployed in database yet
+        if (error && weekEndIso) {
+          // Attempt direct query fallback (works for admins/teachers and readable sessions)
+          try {
+            let q = supabase
+              .from('grammar_game_sessions')
+              .select('student_id, score, accuracy, best_combo, created_at, book, chapter')
+              .gte('created_at', weekStartIso!)
+              .lte('created_at', weekEndIso);
+
+            if (b) q = q.eq('book', b);
+            if (chapter !== 'all') q = q.eq('chapter', chapter);
+
+            const { data: directSessions, error: directErr } = await q;
+
+            if (!directErr && directSessions && directSessions.length > 0) {
+              const studentIds = Array.from(new Set(directSessions.map((s) => s.student_id)));
+              const { data: studentsData } = await supabase
+                .from('students')
+                .select('id, student_name')
+                .in('id', studentIds);
+
+              const nameMap = new Map<string, string>();
+              studentsData?.forEach((st) => nameMap.set(st.id, st.student_name));
+
+              const { data: userRes } = await supabase.auth.getUser();
+              const currentUserId = userRes?.user?.id;
+
+              const aggMap = new Map<string, {
+                student_id: string;
+                student_name: string;
+                total_score: number;
+                best_score: number;
+                accuracySum: number;
+                max_combo: number;
+                total_games: number;
+                is_current_user: boolean;
+              }>();
+
+              directSessions.forEach((s) => {
+                const existing = aggMap.get(s.student_id);
+                const score = Number(s.score || 0);
+                const acc = Number(s.accuracy || 0);
+                const combo = Number(s.best_combo || 0);
+                const isMe = s.student_id === currentUserId;
+                const sName = nameMap.get(s.student_id) || 'Student';
+
+                if (!existing) {
+                  aggMap.set(s.student_id, {
+                    student_id: s.student_id,
+                    student_name: sName,
+                    total_score: score,
+                    best_score: score,
+                    accuracySum: acc,
+                    max_combo: combo,
+                    total_games: 1,
+                    is_current_user: isMe,
+                  });
+                } else {
+                  existing.total_score += score;
+                  existing.best_score = Math.max(existing.best_score, score);
+                  existing.accuracySum += acc;
+                  existing.max_combo = Math.max(existing.max_combo, combo);
+                  existing.total_games += 1;
+                }
+              });
+
+              const list = Array.from(aggMap.values()).map((item) => ({
+                first_name: item.student_name,
+                student_name: item.student_name,
+                score: item.total_score,
+                accuracy: Math.round((item.accuracySum / item.total_games) * 10) / 10,
+                best_combo: item.max_combo,
+                games_played: item.total_games,
+                is_current_user: item.is_current_user,
+              }));
+
+              list.sort((a, b) => b.score - a.score || b.accuracy - a.accuracy || b.best_combo - a.best_combo);
+
+              return list.map((item, idx) => ({
+                ...item,
+                rank: idx + 1,
+              })) as GrammarRushLeaderboardEntry[];
+            }
+          } catch {
+            // ignore and fallback to standard RPC without p_week_end
+          }
+
+          // Fallback to calling RPC without p_week_end
+          const retry = await supabase.rpc('get_grammar_rush_leaderboard', {
+            p_book: b,
+            p_chapter: chapter === 'all' ? null : chapter,
+            p_week_start: weekStartIso,
+          });
+          data = retry.data;
+          error = retry.error;
+        }
+
         if (error) throw error;
         return ((data || []) as Record<string, unknown>[]).map((row) => {
           const name = String(row.student_name || row.full_name || row.first_name || 'Student').trim();

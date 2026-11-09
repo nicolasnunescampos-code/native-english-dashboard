@@ -229,7 +229,7 @@ const AdminGrades: React.FC = () => {
             Filter by Teacher
           </label>
           <Select value={selectedTeacher} onValueChange={setSelectedTeacher}>
-            <SelectTrigger className="bg-white">
+            <SelectTrigger className="bg-background">
               <SelectValue placeholder="All Teachers" />
             </SelectTrigger>
             <SelectContent>

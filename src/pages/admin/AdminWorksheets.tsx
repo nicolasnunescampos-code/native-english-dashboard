@@ -82,13 +82,13 @@ export default function AdminWorksheets() {
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
                   disabled={isGenerating}
-                  className="bg-white"
+                  className="bg-background"
                 />
               </div>
               <div className="md:col-span-3 space-y-2">
                 <Label htmlFor="difficulty">Level</Label>
                 <Select value={difficulty} onValueChange={setDifficulty} disabled={isGenerating}>
-                  <SelectTrigger className="bg-white">
+                  <SelectTrigger className="bg-background">
                     <SelectValue placeholder="Level" />
                   </SelectTrigger>
                   <SelectContent>

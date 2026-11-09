@@ -46,6 +46,20 @@ export function cleanStudentName(rawName: string | null | undefined): string {
   return cleaned.trim();
 }
 
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const d = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) d[i][0] = i;
+  for (let j = 0; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+    }
+  }
+  return d[m][n];
+}
+
 export interface ResolvedStudent {
   id: string;
   student_name: string;
@@ -80,35 +94,50 @@ export async function resolveStudent(rawName: string | null | undefined): Promis
   const exact = allStudents.find(s => (s.student_name || '').trim().toLowerCase() === target);
   if (exact) return exact as ResolvedStudent;
 
-  // 2b. Substring match (either clean contains student_name or student_name contains clean)
-  const sub = allStudents.find(s => {
+  // 2b. If the search target contains a full student_name from DB (e.g. search input has middle or extra names)
+  const containingMatches = allStudents.filter(s => {
     const sName = (s.student_name || '').trim().toLowerCase();
-    return sName && (target.includes(sName) || sName.includes(target));
+    return sName && target.includes(sName);
   });
-  if (sub) return sub as ResolvedStudent;
+  if (containingMatches.length > 0) {
+    containingMatches.sort((a, b) => (b.student_name || '').length - (a.student_name || '').length);
+    return containingMatches[0] as ResolvedStudent;
+  }
 
-  // 2c. First name + last name similarity (handles spelling variants e.g. Scheeren vs Sheeran)
-  if (targetWords.length > 0) {
+  // 2c. If the student_name in DB contains the search target (e.g. search input was shorter like a single word)
+  // ONLY match if it uniquely resolves to exactly 1 student to avoid confusing different students with the same first name (e.g. Bruno Maia vs Bruno Luano)
+  const subMatches = allStudents.filter(s => {
+    const sName = (s.student_name || '').trim().toLowerCase();
+    return sName && sName.includes(target);
+  });
+  if (subMatches.length === 1) {
+    return subMatches[0] as ResolvedStudent;
+  }
+
+  // 2d. First name + last name similarity (handles spelling variants e.g. Scheeren vs Sheeran)
+  if (targetWords.length > 1) {
     const firstMatches = allStudents.filter(s => {
       const sWords = (s.student_name || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
       return sWords.length > 0 && sWords[0] === targetWords[0];
     });
 
-    if (firstMatches.length === 1) {
+    if (firstMatches.length === 1 && targetWords.length === 1) {
       return firstMatches[0] as ResolvedStudent;
     }
 
-    if (firstMatches.length > 1 && targetWords.length > 1) {
+    if (firstMatches.length > 0) {
       const targetLast = targetWords[targetWords.length - 1];
       const best = firstMatches.find(s => {
         const sWords = (s.student_name || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
         const sLast = sWords[sWords.length - 1];
         if (!sLast) return false;
         return (
+          sLast === targetLast ||
           sLast.startsWith(targetLast.slice(0, 2)) ||
           targetLast.startsWith(sLast.slice(0, 2)) ||
           sLast.includes(targetLast) ||
-          targetLast.includes(sLast)
+          targetLast.includes(sLast) ||
+          levenshtein(sLast, targetLast) <= 2
         );
       });
       if (best) return best as ResolvedStudent;
@@ -123,25 +152,53 @@ export async function fetchStudentNextChapters(
 ): Promise<Partial<Record<ClassType, NextChapterInfo>>> {
   const cleanName = cleanStudentName(studentName);
   const safeName = cleanName.replace(/['"]/g, '');
-  
-  let { data: history } = await supabase
+  if (!safeName) return {};
+
+  const resolved = await resolveStudent(cleanName);
+  let assignedClassIds: number[] = [];
+  if (resolved?.id) {
+    const { data: assignments } = await supabase
+      .from('class_assignments')
+      .select('class_id')
+      .eq('student_id', resolved.id);
+    if (assignments && assignments.length > 0) {
+      assignedClassIds = assignments.map(a => a.class_id);
+    }
+  }
+
+  let query = supabase
     .from("classes")
     .select("class_type, class_chapter, class_level, date, time")
-    .ilike("student_name", `%${safeName}%`)
     .not("class_grade", "is", null);
 
+  if (assignedClassIds.length > 0) {
+    query = query.or(`id.in.(${assignedClassIds.join(',')}),student_name.ilike.%${safeName}%`);
+  } else {
+    query = query.ilike("student_name", `%${safeName}%`);
+  }
+
+  let { data: history } = await query;
+
+  // Fallback for legacy single-first-name classes ONLY if the student's first name is UNIQUE in the school!
   if ((!history || history.length === 0) && safeName.includes(' ')) {
     const firstName = safeName.split(' ')[0];
-    const { data: fallbackHistory } = await supabase
-      .from("classes")
-      .select("class_type, class_chapter, class_level, date, time")
-      .ilike("student_name", `%${firstName}%`)
-      .not("class_grade", "is", null);
-    history = fallbackHistory;
+    const { data: matchedStudents } = await supabase
+      .from('students')
+      .select('id, student_name')
+      .ilike('student_name', `${firstName} %`);
+
+    if (matchedStudents && matchedStudents.length === 1) {
+      const { data: fallbackHistory } = await supabase
+        .from("classes")
+        .select("class_type, class_chapter, class_level, date, time")
+        .or(`student_name.ilike.${firstName},student_name.ilike.${firstName}'s class`)
+        .not("class_grade", "is", null);
+      history = fallbackHistory;
+    }
   }
 
   const nextChapters: Partial<Record<ClassType, NextChapterInfo>> = {};
-  if (!history) return nextChapters;
+  if (!history || history.length === 0) return nextChapters;
 
   for (const type of ["Grammar", "Reading", "Listening", "Club (Reading)", "Club (Listening)", "Club"] as ClassType[]) {
     const last = history
@@ -202,20 +259,46 @@ export async function fetchUpcomingClassType(studentName: string): Promise<Class
   const start = startOfWeek(now, { weekStartsOn: 1 }).toISOString().split('T')[0];
   const end = endOfWeek(now, { weekStartsOn: 1 }).toISOString().split('T')[0];
 
-  let { data: classes } = await supabase
+  let assignedClassIds: number[] = [];
+  if (studentId) {
+    const { data: assignments } = await supabase
+      .from('class_assignments')
+      .select('class_id')
+      .eq('student_id', studentId);
+    if (assignments && assignments.length > 0) {
+      assignedClassIds = assignments.map(a => a.class_id);
+    }
+  }
+
+  let query = supabase
     .from("classes")
     .select("class_type, class_chapter, class_level, date, time")
-    .ilike("student_name", `%${safeName}%`)
     .not("class_grade", "is", null);
 
+  if (assignedClassIds.length > 0) {
+    query = query.or(`id.in.(${assignedClassIds.join(',')}),student_name.ilike.%${safeName}%`);
+  } else {
+    query = query.ilike("student_name", `%${safeName}%`);
+  }
+
+  let { data: classes } = await query;
+
+  // Fallback for legacy single-first-name classes ONLY if the student's first name is UNIQUE in the school!
   if ((!classes || classes.length === 0) && safeName.includes(' ')) {
     const firstName = safeName.split(' ')[0];
-    const { data: fallbackClasses } = await supabase
-      .from("classes")
-      .select("class_type, class_chapter, class_level, date, time")
-      .ilike("student_name", `%${firstName}%`)
-      .not("class_grade", "is", null);
-    classes = fallbackClasses;
+    const { data: matchedStudents } = await supabase
+      .from('students')
+      .select('id, student_name')
+      .ilike('student_name', `${firstName} %`);
+
+    if (matchedStudents && matchedStudents.length === 1) {
+      const { data: fallbackClasses } = await supabase
+        .from("classes")
+        .select("class_type, class_chapter, class_level, date, time")
+        .or(`student_name.ilike.${firstName},student_name.ilike.${firstName}'s class`)
+        .not("class_grade", "is", null);
+      classes = fallbackClasses;
+    }
   }
 
   if (!classes || classes.length === 0) {

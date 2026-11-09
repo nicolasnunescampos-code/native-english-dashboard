@@ -938,13 +938,13 @@ const AdminLeads: React.FC = () => {
             </div>
 
             {isReferral && (
-              <div className="space-y-2 p-3 bg-purple-50 rounded-lg border border-purple-100">
-                <Label className="text-purple-800">Who referred them?</Label>
+              <div className="space-y-2 p-3 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-100 dark:border-purple-800/40">
+                <Label className="text-purple-800 dark:text-purple-300">Who referred them?</Label>
                 <Select
                   value={form.referred_by}
                   onValueChange={(val) => setForm({ ...form, referred_by: val })}
                 >
-                  <SelectTrigger className="bg-white">
+                  <SelectTrigger className="bg-background">
                     <SelectValue placeholder="Select a student..." />
                   </SelectTrigger>
                   <SelectContent>

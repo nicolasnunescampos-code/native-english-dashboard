@@ -14,7 +14,7 @@ import {
   getGrammarBookMeta,
 } from '@/data/grammarRushCurriculum';
 import { NativeQuestLeaderboardCard } from '@/components/grammar-rush/NativeQuestLeaderboardCard';
-import { format, parseISO, startOfWeek } from 'date-fns';
+import { format, parseISO, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
 import {
   BarChart,
   Bar,
@@ -117,7 +117,7 @@ export default function AdminGrammarRushTracker() {
   const [filterBook, setFilterBook] = useState<GrammarBookLevel | 'all'>('all');
   const [filterChapter, setFilterChapter] = useState<string>('all');
   const [filterStudentId, setFilterStudentId] = useState<string>('all');
-  const [leaderboardPeriod, setLeaderboardPeriod] = useState<'week' | 'all'>('week');
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState<'week' | 'previous_week' | 'all'>('week');
 
   // Selected session for viewing exact student answers/mistakes
   const [selectedSessionForAnswers, setSelectedSessionForAnswers] =
@@ -351,10 +351,18 @@ export default function AdminGrammarRushTracker() {
 
   // Student Leaderboard Rankings (1st, 2nd, 3rd...)
   const leaderboardRows = useMemo(() => {
-    const weekStartIso = startOfWeek(new Date(), { weekStartsOn: 1 }).toISOString();
+    const now = new Date();
+    const weekStartIso = startOfWeek(now, { weekStartsOn: 1 }).toISOString();
+    const prevWeek = subWeeks(now, 1);
+    const prevWeekStartIso = startOfWeek(prevWeek, { weekStartsOn: 1 }).toISOString();
+    const prevWeekEndIso = endOfWeek(prevWeek, { weekStartsOn: 1 }).toISOString();
+
     const relevantSessions = filteredSessions.filter((s) => {
       if (leaderboardPeriod === 'week') {
         return s.created_at && s.created_at >= weekStartIso;
+      }
+      if (leaderboardPeriod === 'previous_week') {
+        return s.created_at && s.created_at >= prevWeekStartIso && s.created_at <= prevWeekEndIso;
       }
       return true;
     });
@@ -1020,11 +1028,11 @@ export default function AdminGrammarRushTracker() {
             </CardTitle>
           </div>
 
-          <div className="inline-flex rounded-xl liquid-glass-pill p-1 text-xs font-bold self-start sm:self-center">
+          <div className="inline-flex rounded-xl liquid-glass-pill p-1 text-xs font-bold self-start sm:self-center overflow-x-auto max-w-full">
             <button
               type="button"
               onClick={() => setLeaderboardPeriod('week')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
+              className={`px-3 py-1.5 rounded-lg transition-all whitespace-nowrap cursor-pointer ${
                 leaderboardPeriod === 'week'
                   ? 'bg-white dark:bg-slate-800 text-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'
@@ -1034,8 +1042,19 @@ export default function AdminGrammarRushTracker() {
             </button>
             <button
               type="button"
+              onClick={() => setLeaderboardPeriod('previous_week')}
+              className={`px-3 py-1.5 rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+                leaderboardPeriod === 'previous_week'
+                  ? 'bg-white dark:bg-slate-800 text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Previous Week
+            </button>
+            <button
+              type="button"
               onClick={() => setLeaderboardPeriod('all')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
+              className={`px-3 py-1.5 rounded-lg transition-all whitespace-nowrap cursor-pointer ${
                 leaderboardPeriod === 'all'
                   ? 'bg-white dark:bg-slate-800 text-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'

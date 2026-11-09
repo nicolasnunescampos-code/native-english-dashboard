@@ -250,6 +250,7 @@ const TeacherGrade: React.FC = () => {
 
       // Clear draft
       localStorage.removeItem(`grade_draft_${selectedClass.id}`);
+      window.dispatchEvent(new CustomEvent('class-graded', { detail: { classId: selectedClass.id } }));
       toast.success('Grades saved successfully!');
       navigate('/teacher/schedule');
     } catch (error) {

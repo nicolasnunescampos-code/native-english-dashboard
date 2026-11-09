@@ -61,6 +61,7 @@ export type TeacherPaymentRow = {
   id: string;
   name: string;
   weeks: Record<number, number>;
+  autoWeeks: Record<number, number>;
   weekDetails: Record<number, WeekDetails>;
   isConfirmedWeek: Record<number, boolean>;
   totalAulas: number;
@@ -114,11 +115,15 @@ export default function AdminTeacherPayments() {
   const [savingRate, setSavingRate] = useState<string | null>(null)
 
   const [selectedDetails, setSelectedDetails] = useState<{
+    teacherId?: string;
     teacherName: string;
     week: number;
     details: WeekDetails;
     confirmedCount?: number;
+    autoCount: number;
+    targetMonday: string;
   } | null>(null)
+  const [syncingConfirmation, setSyncingConfirmation] = useState(false)
 
   const [confirmations, setConfirmations] = useState<any[]>([])
 
@@ -298,6 +303,45 @@ export default function AdminTeacherPayments() {
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
 
+  const handleSyncConfirmationToGraded = async (teacherId: string, targetMonday: string, gradedCount: number) => {
+    try {
+      setSyncingConfirmation(true);
+
+      const { data: existing } = await supabase
+        .from('teacher_weekly_confirmations')
+        .select('id')
+        .eq('teacher_id', teacherId)
+        .eq('week_start_date', targetMonday)
+        .maybeSingle();
+
+      if (existing) {
+        const { error } = await supabase
+          .from('teacher_weekly_confirmations')
+          .update({ classes_count: gradedCount })
+          .eq('id', existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('teacher_weekly_confirmations')
+          .insert({
+            teacher_id: teacherId,
+            week_start_date: targetMonday,
+            classes_count: gradedCount,
+          });
+        if (error) throw error;
+      }
+
+      toast.success(`Updated confirmation to ${gradedCount} classes!`);
+      setSelectedDetails(prev => prev ? { ...prev, confirmedCount: gradedCount } : null);
+      await loadData();
+    } catch (err: any) {
+      console.error('Error syncing confirmation:', err);
+      toast.error('Failed to update confirmation: ' + (err.message || 'Unknown error'));
+    } finally {
+      setSyncingConfirmation(false);
+    }
+  };
+
   // Calculate stats
   const tableData: TeacherPaymentRow[] = useMemo(() => {
     const monthWeeks = getCustomWeeks(currentDate)
@@ -414,6 +458,7 @@ export default function AdminTeacherPayments() {
         id: teacher.id,
         name: teacher.name,
         weeks,
+        autoWeeks,
         weekDetails,
         isConfirmedWeek,
         totalAulas,
@@ -471,6 +516,8 @@ export default function AdminTeacherPayments() {
                       const weekKey = i + 1;
                       const isConfirmed = row.isConfirmedWeek?.[weekKey];
                       const count = row.weeks[weekKey];
+                      const autoCount = row.autoWeeks?.[weekKey] || 0;
+                      const hasDiscrepancy = isConfirmed && count !== autoCount;
                       const hasData = (count !== undefined && count !== null) || (row.weekDetails[weekKey] && (
                         row.weekDetails[weekKey].graded.length > 0 ||
                         row.weekDetails[weekKey].absent.length > 0 ||
@@ -483,23 +530,36 @@ export default function AdminTeacherPayments() {
                             <Button 
                                variant="ghost" 
                                className={cn(
-                                 "font-bold h-auto py-1 px-2.5 min-w-[36px] gap-1 transition-all",
-                                 isConfirmed
+                                 "font-bold h-auto py-1 px-2.5 min-w-[36px] gap-1 transition-all cursor-pointer",
+                                 hasDiscrepancy
+                                   ? "text-amber-700 dark:text-amber-400 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 shadow-2xs"
+                                   : isConfirmed
                                    ? "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 shadow-2xs"
                                    : "text-primary hover:bg-primary/20 bg-primary/5"
                                )}
-                               title={isConfirmed ? "Confirmed in Teacher Confirmations" : "Calculated from graded classes"}
+                               title={
+                                 hasDiscrepancy
+                                   ? `Discrepancy: Teacher confirmed ${count}, but ${autoCount} classes are graded! Click to review and sync.`
+                                   : isConfirmed
+                                   ? "Confirmed in Teacher Confirmations"
+                                   : "Calculated from graded classes"
+                               }
                                onClick={() => setSelectedDetails({
+                                 teacherId: row.id,
                                  teacherName: row.name,
                                  week: weekKey,
                                  details: row.weekDetails[weekKey] || { graded: [], absent: [], scheduled: [] },
-                                 confirmedCount: isConfirmed ? count : undefined
+                                 confirmedCount: isConfirmed ? count : undefined,
+                                 autoCount: autoCount,
+                                 targetMonday: getWeekTargetMonday(monthWeeks[weekKey - 1]),
                                })}
                             >
                               <span>{count || 0}</span>
-                              {isConfirmed && (
+                              {hasDiscrepancy ? (
+                                <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                              ) : isConfirmed ? (
                                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                              )}
+                              ) : null}
                             </Button>
                           ) : (
                             <span className="text-muted-foreground opacity-50">-</span>
@@ -582,7 +642,41 @@ export default function AdminTeacherPayments() {
            
            {selectedDetails && (
              <div className="space-y-6 mt-4">
-                {selectedDetails.confirmedCount !== undefined && (
+                {/* DISCREPANCY WARNING BANNER */}
+                {selectedDetails.confirmedCount !== undefined && selectedDetails.confirmedCount !== selectedDetails.autoCount && (
+                  <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                        <span className="font-bold text-foreground text-sm">Confirmation Discrepancy</span>
+                      </div>
+                      <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-400 font-bold">
+                        {selectedDetails.confirmedCount} Confirmed vs {selectedDetails.autoCount} Paid
+                      </Badge>
+                    </div>
+                    <p className="text-amber-900/90 dark:text-amber-300/90 leading-relaxed">
+                      The teacher confirmed <strong>{selectedDetails.confirmedCount} classes</strong>, but there are <strong>{selectedDetails.autoCount} graded classes</strong> in the calendar for this week. (Classes were likely graded after the teacher submitted their weekly confirmation).
+                    </p>
+                    <div className="pt-1 flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => handleSyncConfirmationToGraded(
+                          selectedDetails.teacherId!,
+                          selectedDetails.targetMonday,
+                          selectedDetails.autoCount
+                        )}
+                        disabled={syncingConfirmation}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+                        {syncingConfirmation ? 'Updating...' : `Sync Confirmation to ${selectedDetails.autoCount} Classes`}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* MATCHING CONFIRMATION BADGE */}
+                {selectedDetails.confirmedCount !== undefined && selectedDetails.confirmedCount === selectedDetails.autoCount && (
                   <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />

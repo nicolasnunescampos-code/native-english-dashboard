@@ -1,4 +1,7 @@
-# Logs
+# Videos & promo assets
+promo/
+*.mp4
+
 logs
 *.log
 npm-debug.log*

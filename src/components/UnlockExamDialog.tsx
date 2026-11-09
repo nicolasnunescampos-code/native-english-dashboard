@@ -51,17 +51,24 @@ export function UnlockExamDialog({ studentName, variant = "default", size = "def
 
                 if (!lastGrammar && safeName.includes(' ')) {
                     const firstName = safeName.split(' ')[0];
-                    const { data: fallbackGrammar } = await supabase
-                        .from('classes')
-                        .select('class_level, class_chapter')
-                        .ilike('student_name', `%${firstName}%`)
-                        .eq('class_type', 'Grammar')
-                        .not('class_grade', 'is', null)
-                        .order('date', { ascending: false })
-                        .order('time', { ascending: false })
-                        .limit(1)
-                        .maybeSingle();
-                    lastGrammar = fallbackGrammar;
+                    const { data: matchedStudents } = await supabase
+                        .from('students')
+                        .select('id, student_name')
+                        .ilike('student_name', `${firstName} %`);
+
+                    if (matchedStudents && matchedStudents.length === 1) {
+                        const { data: fallbackGrammar } = await supabase
+                            .from('classes')
+                            .select('class_level, class_chapter')
+                            .or(`student_name.ilike.${firstName},student_name.ilike.${firstName}'s class`)
+                            .eq('class_type', 'Grammar')
+                            .not('class_grade', 'is', null)
+                            .order('date', { ascending: false })
+                            .order('time', { ascending: false })
+                            .limit(1)
+                            .maybeSingle();
+                        lastGrammar = fallbackGrammar;
+                    }
                 }
 
                 if (lastGrammar) {

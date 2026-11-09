@@ -14,8 +14,18 @@ const SCHOOL_TZ = "America/Sao_Paulo";
 export const toLocalDate = (dateStr: string, timeStr: string | undefined | null, sourceTz: string = SCHOOL_TZ): Date => {
   if (!timeStr) return new Date(dateStr); // Fallback
   
-  // Format: "YYYY-MM-DD HH:mm:00"
-  const dateStringWithTime = `${dateStr} ${timeStr}:00`;
+  let cleanTime = timeStr.trim();
+  if (cleanTime.includes('T')) {
+    cleanTime = cleanTime.split('T')[1];
+  }
+  if (cleanTime.length === 5) {
+    cleanTime = `${cleanTime}:00`;
+  } else if (cleanTime.length > 8) {
+    cleanTime = cleanTime.substring(0, 8);
+  }
+
+  // Format: "YYYY-MM-DD HH:mm:ss"
+  const dateStringWithTime = `${dateStr} ${cleanTime}`;
   
   // Interprets the date string as being in the provided source timezone, 
   // and returns a standard Date object representing that exact moment in UTC/Local.

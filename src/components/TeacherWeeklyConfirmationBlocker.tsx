@@ -434,6 +434,21 @@ export const TeacherWeeklyConfirmationBlocker: React.FC = () => {
                 )}
               </div>
 
+              {/* Warning if there are ungraded classes */}
+              {classesList.filter(c => !c.is_graded).length > 0 && (
+                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
+                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold">
+                      You have {classesList.filter(c => !c.is_graded).length} ungraded class{classesList.filter(c => !c.is_graded).length > 1 ? 'es' : ''} this week!
+                    </p>
+                    <p className="text-amber-800/80 dark:text-amber-300/80 mt-0.5">
+                      Only graded classes are counted for payment. If you already taught these classes, please grade them before confirming so they are included in your payment.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Primary Confirmation Button */}
               <Button
                 size="lg"

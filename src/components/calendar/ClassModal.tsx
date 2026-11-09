@@ -198,7 +198,7 @@ export const ClassModal: React.FC<ClassFormProps> = ({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-lg">
+            <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto pb-6 sm:pb-6">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         {formData.recuperation_id ? (

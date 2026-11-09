@@ -6,6 +6,7 @@ import { fromZonedTime } from 'date-fns-tz';
 import { supabase, Class, Teacher } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import { Card } from '@/components/ui/card';
+import { getContrastTextColor } from '@/lib/utils';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
 const locales = {
@@ -26,19 +27,24 @@ interface CalendarClassEvent extends CalendarEvent {
 }
 
 const CustomEvent = ({ event }: EventProps<CalendarClassEvent>) => {
+    const color = event.resource?.color || '#3788d8';
+    const textColor = getContrastTextColor(color);
+    const isDarkText = textColor === '#0f172a';
+
     return (
         <div 
             className="h-full w-full flex flex-col justify-start overflow-hidden p-0.5"
+            style={{ color: textColor }}
             title={`${event.title}\n${format(event.start!, 'h:mm a')} - ${format(event.end!, 'h:mm a')}\nJoin: ${event.resource?.link_url || 'No link'}`}
         >
-            <div className="font-semibold text-[9px] sm:text-[10px] leading-[1.1] line-clamp-2 break-words">
+            <div className={`font-bold text-[9px] sm:text-[10px] leading-[1.1] line-clamp-2 break-words ${isDarkText ? 'text-slate-950 font-black drop-shadow-xs' : 'text-white'}`}>
                 {event.title}
             </div>
-            <div className="text-[8px] sm:text-[9px] opacity-90 leading-none mt-0.5 truncate">
+            <div className={`text-[8px] sm:text-[9px] leading-none mt-0.5 truncate ${isDarkText ? 'text-slate-900 font-bold opacity-90' : 'text-white/90'}`}>
                 {format(event.start!, 'h:mm a')}
             </div>
             {event.resource?.link_url && (
-                <div className="text-[8px] opacity-75 mt-0.5 truncate">
+                <div className={`text-[8px] mt-0.5 truncate ${isDarkText ? 'text-slate-800 font-semibold underline' : 'opacity-75'}`}>
                     Join link
                 </div>
             )}
@@ -86,8 +92,18 @@ export const ReadOnlyCalendar: React.FC<ReadOnlyCalendarProps> = ({ role, identi
 
         // Filter based on role
         if (role === 'student') {
-            // The class title usually contains the student name, or the student_name column has it
-            query = query.ilike('student_name', `%${identifier}%`);
+            let matchedClassIds: number[] = [];
+            const { data: studentData } = await supabase.from('students').select('id').ilike('student_name', identifier).maybeSingle();
+            if (studentData?.id) {
+                const { data: assignments } = await supabase.from('class_assignments').select('class_id').eq('student_id', studentData.id);
+                if (assignments) matchedClassIds = assignments.map(a => a.class_id);
+            }
+
+            if (matchedClassIds.length > 0) {
+                query = query.or(`id.in.(${matchedClassIds.join(',')}),student_name.ilike.%${identifier}%`);
+            } else {
+                query = query.ilike('student_name', `%${identifier}%`);
+            }
         } else if (role === 'teacher') {
             query = query.or(`title.ilike.%${identifier}%,title.eq.${identifier}`);
         }
@@ -275,10 +291,7 @@ export const ReadOnlyCalendar: React.FC<ReadOnlyCalendarProps> = ({ role, identi
     const eventStyleGetter = (event: CalendarClassEvent) => {
         const cls = event.resource;
         const color = cls.color || '#3788d8';
-
-        const teacher = teachers.find(t => t.id === cls.teacher_id);
-        const isBruno = teacher?.name?.toLowerCase().includes('bruno') ||
-            (!teacher && cls.title?.toLowerCase().includes('bruno'));
+        const textColor = getContrastTextColor(color);
 
         return {
             style: {
@@ -286,7 +299,7 @@ export const ReadOnlyCalendar: React.FC<ReadOnlyCalendarProps> = ({ role, identi
                 borderRadius: '4px',
                 opacity: 1,
                 border: 'none',
-                color: isBruno ? 'black' : 'white',
+                color: textColor,
                 display: 'block'
             }
         };

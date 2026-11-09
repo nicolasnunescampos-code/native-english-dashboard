@@ -23,7 +23,8 @@ export const CompactNativeQuestRankCard: React.FC<CompactNativeQuestRankCardProp
   onOpenFullBoard,
 }) => {
   const { studentName } = useAuth();
-  const { data: leaderboard = [], isLoading } = useGrammarLeaderboard('ALL', 'all', 'week');
+  const [timeframe, setTimeframe] = React.useState<'week' | 'previous_week'>('week');
+  const { data: leaderboard = [], isLoading } = useGrammarLeaderboard('ALL', 'all', timeframe);
 
   // Display top 10 students (or up to maxEntries)
   const topRanked = leaderboard.slice(0, maxEntries);
@@ -45,9 +46,9 @@ export const CompactNativeQuestRankCard: React.FC<CompactNativeQuestRankCardProp
         className
       )}
     >
-      <CardHeader className="pb-3 flex flex-row items-center justify-between">
+      <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-2xl bg-[#E6EEFA] dark:bg-[#161F3B] border border-[#4FC3E8]/30 flex items-center justify-center text-[#2B2F8F] dark:text-[#4FC3E8] shadow-xs">
+          <div className="w-10 h-10 rounded-2xl bg-[#E6EEFA] dark:bg-[#161F3B] border border-[#4FC3E8]/30 flex items-center justify-center text-[#2B2F8F] dark:text-[#4FC3E8] shadow-xs shrink-0">
             <Trophy className="w-5 h-5 text-amber-500 fill-amber-500" />
           </div>
           <div>
@@ -55,29 +56,57 @@ export const CompactNativeQuestRankCard: React.FC<CompactNativeQuestRankCardProp
               Native Quest Ranking
             </CardTitle>
             <p className="text-[11px] text-muted-foreground font-semibold">
-              Weekly Top 10 League
+              {timeframe === 'week' ? 'This Week’s League' : 'Previous Week’s League'}
             </p>
           </div>
         </div>
 
-        {onOpenFullBoard ? (
-          <button
-            type="button"
-            onClick={onOpenFullBoard}
-            className="text-xs font-black text-[#2B2F8F] dark:text-[#4FC3E8] hover:underline inline-flex items-center gap-1 transition-all cursor-pointer"
-          >
-            <span>Full Board</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        ) : (
-          <Link
-            to="/student/grammar-rush?tab=leaderboard"
-            className="text-xs font-black text-[#2B2F8F] dark:text-[#4FC3E8] hover:underline inline-flex items-center gap-1 transition-all"
-          >
-            <span>Full Board</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Quick Week Toggle */}
+          <div className="inline-flex rounded-lg p-0.5 bg-muted/60 text-[10px] font-bold">
+            <button
+              type="button"
+              onClick={() => setTimeframe('week')}
+              className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
+                timeframe === 'week'
+                  ? 'bg-background text-foreground shadow-xs font-black'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              This Week
+            </button>
+            <button
+              type="button"
+              onClick={() => setTimeframe('previous_week')}
+              className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
+                timeframe === 'previous_week'
+                  ? 'bg-background text-foreground shadow-xs font-black'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Last Week
+            </button>
+          </div>
+
+          {onOpenFullBoard ? (
+            <button
+              type="button"
+              onClick={onOpenFullBoard}
+              className="text-xs font-black text-[#2B2F8F] dark:text-[#4FC3E8] hover:underline inline-flex items-center gap-1 transition-all cursor-pointer"
+            >
+              <span>Full Board</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            <Link
+              to="/student/grammar-rush?tab=leaderboard"
+              className="text-xs font-black text-[#2B2F8F] dark:text-[#4FC3E8] hover:underline inline-flex items-center gap-1 transition-all"
+            >
+              <span>Full Board</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          )}
+        </div>
       </CardHeader>
 
       <CardContent className="space-y-3.5 pt-0">
