@@ -109,10 +109,10 @@ const AdminStudents: React.FC = () => {
         .or("speaking_grade.not.is.null,class_grade.not.is.null,grammar_grade.not.is.null,reading_grade.not.is.null,listening_grade.not.is.null"),
       supabase
         .from("grammar_game_sessions")
-        .select("student_id, student_name, book, chapter, score, accuracy"),
+        .select("student_id, student_name, book, chapter, score, accuracy, created_at"),
       supabase
         .from("student_speaking_attempts")
-        .select("student_id, student_name, score"),
+        .select("student_id, student_name, score, created_at"),
     ])
 
     if (studentsRes.error) {
@@ -169,6 +169,21 @@ const AdminStudents: React.FC = () => {
             )
           : 0
 
+      const timestamps: number[] = [];
+      stuNq.forEach((s: any) => {
+        if (s.created_at) {
+          const t = new Date(s.created_at).getTime();
+          if (!isNaN(t)) timestamps.push(t);
+        }
+      });
+      stuSpeak.forEach((a: any) => {
+        if (a.created_at) {
+          const t = new Date(a.created_at).getTime();
+          if (!isNaN(t)) timestamps.push(t);
+        }
+      });
+      const lastActive = timestamps.length > 0 ? new Date(Math.max(...timestamps)).toISOString() : null;
+
       map[stu.id] = {
         classes_completed: stuClasses.length,
         nq_sessions: nqSessions,
@@ -177,7 +192,7 @@ const AdminStudents: React.FC = () => {
         nq_chapters_count: nqChaptersCount,
         speaking_attempts: stuSpeak.length,
         speaking_avg_score: speakingAvgScore,
-        nq_last_accessed: stuNq.length > 0 ? (stuNq[0].created_at || null) : null,
+        nq_last_accessed: lastActive,
       }
     })
     setProgressByStudent(map)
