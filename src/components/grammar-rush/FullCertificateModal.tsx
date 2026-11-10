@@ -3,8 +3,9 @@ import {
   Dialog,
   DialogContent,
 } from '@/components/ui/dialog';
-import { Trophy, Award, Printer, CheckCircle2, X, Sparkles, ShieldCheck } from 'lucide-react';
+import { Trophy, Award, Printer, CheckCircle2, X, Sparkles, ShieldCheck, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
+import { GrammarBookLevel } from '@/lib/supabase';
 
 interface FullCertificateModalProps {
   isOpen: boolean;
@@ -14,6 +15,7 @@ interface FullCertificateModalProps {
   cefr: string;
   totalScore: number;
   completedChaptersCount: number;
+  onAdvanceLevel?: (nextBook: GrammarBookLevel) => void;
 }
 
 export const FullCertificateModal: React.FC<FullCertificateModalProps> = ({
@@ -24,10 +26,14 @@ export const FullCertificateModal: React.FC<FullCertificateModalProps> = ({
   cefr,
   totalScore,
   completedChaptersCount,
+  onAdvanceLevel,
 }) => {
   const handlePrint = () => {
     window.print();
   };
+
+  const nextBookLevel: GrammarBookLevel | null =
+    book === 'Beginner' ? 'Intermediate' : book === 'Intermediate' ? 'Advanced' : null;
 
   const certificateId = `NE-${book.slice(0, 3).toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`;
 
@@ -121,20 +127,34 @@ export const FullCertificateModal: React.FC<FullCertificateModalProps> = ({
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-2">
+            {nextBookLevel && onAdvanceLevel && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onAdvanceLevel(nextBookLevel);
+                }}
+                className="w-full sm:w-auto flex-1 h-12 rounded-2xl native-btn-accent font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_4px_0_#289FCE] cursor-pointer"
+              >
+                <span>Start {nextBookLevel} Level</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
+
             <button
               type="button"
               onClick={handlePrint}
-              className="flex-1 h-12 rounded-2xl native-btn-primary font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_5px_0_#1C2068]"
+              className="w-full sm:w-auto flex-1 h-12 rounded-2xl native-btn-primary font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_5px_0_#1C2068] cursor-pointer"
             >
               <Printer className="w-4 h-4" />
-              <span>Print / Download Certificate</span>
+              <span>Print / Download</span>
             </button>
 
             <button
               type="button"
               onClick={onClose}
-              className="h-12 px-5 rounded-2xl native-btn-ice font-black text-xs uppercase tracking-wider shadow-[0_4px_0_#BAC9E2]"
+              className="w-full sm:w-auto h-12 px-5 rounded-2xl native-btn-ice font-black text-xs uppercase tracking-wider shadow-[0_4px_0_#BAC9E2] cursor-pointer"
             >
               Close
             </button>

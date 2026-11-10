@@ -12,7 +12,7 @@ import {
 } from './DuolingoMascots';
 import { toast } from 'sonner';
 import { playChime } from '@/utils/speechEvaluator';
-import { Trophy, Award, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Trophy, Award, Sparkles, CheckCircle2, ArrowRight } from 'lucide-react';
 
 interface DuolingoMapProps {
   book: GrammarBookLevel;
@@ -21,6 +21,7 @@ interface DuolingoMapProps {
   onSelectChapter: (chapter: string) => void;
   onOpenGuidebook: (chapter?: string) => void;
   onOpenFullCertificate: () => void;
+  onAdvanceLevel?: (nextBook: GrammarBookLevel) => void;
   dailyQuestProgress?: {
     current: number;
     target: number;
@@ -38,6 +39,7 @@ export const DuolingoMap: React.FC<DuolingoMapProps> = ({
   onSelectChapter,
   onOpenGuidebook,
   onOpenFullCertificate,
+  onAdvanceLevel,
   dailyQuestProgress,
 }) => {
   const [chestOpened, setChestOpened] = useState(false);
@@ -51,7 +53,11 @@ export const DuolingoMap: React.FC<DuolingoMapProps> = ({
     };
 
   const completedCount = chaptersData.filter((c) => c.completionPercent >= 100).length;
+  const isChapter10Completed = (chaptersData.find((c) => c.chapter === '10')?.personalBest || 0) > 0;
   const isLevelFullyCompleted = completedCount >= 10;
+  const hasClearedLevel = isLevelFullyCompleted || isChapter10Completed;
+  const nextBookLevel: GrammarBookLevel | null =
+    book === 'Beginner' ? 'Intermediate' : book === 'Intermediate' ? 'Advanced' : null;
 
   const handleOpenChest = () => {
     if (chestOpened) {
@@ -195,6 +201,36 @@ export const DuolingoMap: React.FC<DuolingoMapProps> = ({
             <span>{isLevelFullyCompleted ? 'Claim Full Certificate 🎓' : 'Preview Certificate 📜'}</span>
           </button>
         </div>
+
+        {/* Advance to Next Level Card (when current book is completed) */}
+        {hasClearedLevel && nextBookLevel && onAdvanceLevel && (
+          <div className="mt-5 w-full max-w-sm px-4">
+            <div className="p-5 rounded-3xl bg-gradient-to-br from-[#2B2F8F] via-[#353AA6] to-[#1C2068] text-white border-2 border-[#4FC3E8] shadow-xl text-center space-y-3">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#4FC3E8]/20 text-[#4FC3E8] border border-[#4FC3E8]/40 text-[10px] font-black uppercase tracking-wider">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>{book} Module Cleared!</span>
+              </div>
+
+              <div>
+                <h4 className="font-black text-lg text-white">
+                  Advance to {nextBookLevel} Level 🚀
+                </h4>
+                <p className="text-xs text-white/80 leading-snug mt-1">
+                  You've completed the {book} module! Step up to Level {nextBookLevel === 'Intermediate' ? '2' : '3'} ({nextBookLevel}) to continue your quest.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onAdvanceLevel(nextBookLevel)}
+                className="w-full h-12 rounded-2xl native-btn-accent font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_4px_0_#289FCE] active:translate-y-1 active:shadow-none cursor-pointer"
+              >
+                <span>Continue to {nextBookLevel} Level</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

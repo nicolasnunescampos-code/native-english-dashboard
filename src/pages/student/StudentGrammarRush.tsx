@@ -117,8 +117,49 @@ export default function StudentGrammarRush() {
       setActiveTab(tabParam);
     }
   }, [searchParams]);
-  const [selectedBook, setSelectedBook] = useState<GrammarBookLevel>('Beginner');
-  const [selectedChapter, setSelectedChapter] = useState<string>('1');
+  const [selectedBook, setSelectedBook] = useState<GrammarBookLevel>(() => {
+    try {
+      const saved = localStorage.getItem('native_quest_selected_book') as GrammarBookLevel | null;
+      if (saved && ['Beginner', 'Intermediate', 'Advanced'].includes(saved)) {
+        return saved;
+      }
+    } catch {
+      // ignore
+    }
+    return 'Beginner';
+  });
+  const [selectedChapter, setSelectedChapter] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('native_quest_selected_chapter');
+      if (saved && Number(saved) >= 1 && Number(saved) <= 10) {
+        return saved;
+      }
+    } catch {
+      // ignore
+    }
+    return '1';
+  });
+
+  const changeSelectedBook = useCallback((newBook: GrammarBookLevel, newChapter: string = '1') => {
+    setSelectedBook(newBook);
+    setSelectedChapter(newChapter);
+    try {
+      localStorage.setItem('native_quest_selected_book', newBook);
+      localStorage.setItem('native_quest_selected_chapter', newChapter);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const changeSelectedChapter = useCallback((newChapter: string) => {
+    setSelectedChapter(newChapter);
+    try {
+      localStorage.setItem('native_quest_selected_chapter', newChapter);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const [skillMode, setSkillMode] = useState<'mix' | 'grammar' | 'speaking'>('mix');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
 
@@ -184,6 +225,103 @@ export default function StudentGrammarRush() {
     if (studentSessions.length === 0) return 3;
     return Math.max(3, ...studentSessions.map((s) => s.best_combo || 0));
   }, [studentSessions]);
+
+  // Auto-advance level detection on initial data load
+  const autoLevelDetectedRef = useRef(false);
+
+  useEffect(() => {
+    if (autoLevelDetectedRef.current) return;
+    if (!studentSessions || studentSessions.length === 0) return;
+
+    autoLevelDetectedRef.current = true;
+
+    // Check which levels the student has cleared
+    const beginnerCompleted = studentSessions.some(
+      (s) => s.book === 'Beginner' && String(s.chapter) === '10' && s.score > 0
+    );
+    const intermediateCompleted = studentSessions.some(
+      (s) => s.book === 'Intermediate' && String(s.chapter) === '10' && s.score > 0
+    );
+
+    // If student cleared Beginner but is currently on Beginner:
+    if (beginnerCompleted && !intermediateCompleted) {
+      let savedBook: string | null = null;
+      try {
+        savedBook = localStorage.getItem('native_quest_selected_book');
+      } catch {
+        // ignore
+      }
+      if (!savedBook || savedBook === 'Beginner') {
+        const playedChs = new Set(
+          studentSessions
+            .filter((s) => s.book === 'Intermediate' && s.score > 0)
+            .map((s) => String(s.chapter))
+        );
+        let nextCh = '1';
+        for (let i = 1; i <= 10; i++) {
+          if (!playedChs.has(String(i))) {
+            nextCh = String(i);
+            break;
+          }
+        }
+        changeSelectedBook('Intermediate', nextCh);
+        toast.info('Level Up! 🚀', {
+          description: 'You completed the Beginner module! Continuing in Intermediate Level.',
+        });
+      }
+    } else if (intermediateCompleted) {
+      let savedBook: string | null = null;
+      try {
+        savedBook = localStorage.getItem('native_quest_selected_book');
+      } catch {
+        // ignore
+      }
+      if (!savedBook || savedBook === 'Beginner' || savedBook === 'Intermediate') {
+        const playedChs = new Set(
+          studentSessions
+            .filter((s) => s.book === 'Advanced' && s.score > 0)
+            .map((s) => String(s.chapter))
+        );
+        let nextCh = '1';
+        for (let i = 1; i <= 10; i++) {
+          if (!playedChs.has(String(i))) {
+            nextCh = String(i);
+            break;
+          }
+        }
+        changeSelectedBook('Advanced', nextCh);
+        toast.info('Mastery Level! 🌟', {
+          description: 'You completed Intermediate! Continuing in Advanced Level.',
+        });
+      }
+    }
+  }, [studentSessions, changeSelectedBook]);
+
+  // Direct handlers for advancing levels and chapters
+  const handleAdvanceToNextBook = useCallback(
+    (nextBook: GrammarBookLevel) => {
+      changeSelectedBook(nextBook, '1');
+      setScreen('lobby');
+      if (soundEnabled) {
+        playChime('celebrate');
+      }
+      toast.success(`Welcome to ${nextBook} Level! 🚀`, {
+        description: `You've unlocked Chapter 1 of the ${nextBook} curriculum. Let's practice!`,
+        duration: 5000,
+      });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    [changeSelectedBook, soundEnabled]
+  );
+
+  const handleAdvanceToNextChapter = useCallback(
+    (nextCh: string) => {
+      changeSelectedChapter(nextCh);
+      setScreen('lobby');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    [changeSelectedChapter]
+  );
 
   // ============================================================
   // DUOLINGO CHAPTERS DATA (Mapped for serpentine winding map)
@@ -350,7 +488,7 @@ export default function StudentGrammarRush() {
   const handleStartRound = (chapterOverride?: string) => {
     const targetChapter = chapterOverride || selectedChapter;
     if (chapterOverride && chapterOverride !== selectedChapter) {
-      setSelectedChapter(chapterOverride);
+      changeSelectedChapter(chapterOverride);
     }
 
     const basePoolForChapter =
@@ -548,7 +686,7 @@ export default function StudentGrammarRush() {
   };
 
   const handleOpenChapterModal = (chapter: string) => {
-    setSelectedChapter(chapter);
+    changeSelectedChapter(chapter);
     setModalTargetChapter(chapter);
     setChapterModalOpen(true);
   };
@@ -698,6 +836,14 @@ export default function StudentGrammarRush() {
       totalAnswered > 0 ? Math.round((correctCount / totalAnswered) * 100) : 0;
     const earnedStars =
       score >= 500 && finalAccuracy >= 80 ? 3 : score >= 250 ? 2 : 1;
+    const isLastChapterOfBook = selectedChapter === '10';
+    const nextBookLevel: GrammarBookLevel | null =
+      selectedBook === 'Beginner'
+        ? 'Intermediate'
+        : selectedBook === 'Intermediate'
+          ? 'Advanced'
+          : null;
+    const nextChapterNumber = String(Number(selectedChapter) + 1);
 
     return (
       <div className="max-w-md mx-auto space-y-6 pb-28 pt-4 px-2 select-none animate-in fade-in zoom-in-95 duration-300">
@@ -712,12 +858,28 @@ export default function StudentGrammarRush() {
           )}
 
           <h2 className="text-3xl font-black text-foreground">
-            Chapter Cleared!
+            {isLastChapterOfBook ? `${selectedBook} Module Cleared! 🎉` : 'Chapter Cleared!'}
           </h2>
           <p className="text-xs font-semibold text-muted-foreground">
             {selectedBook} • Chapter {selectedChapter}
           </p>
         </div>
+
+        {/* Celebration Banner when completing the final chapter of a book */}
+        {isLastChapterOfBook && nextBookLevel && (
+          <div className="p-4 rounded-3xl bg-gradient-to-r from-amber-500/15 via-[#4FC3E8]/20 to-[#2B2F8F]/15 border-2 border-[#4FC3E8] text-center space-y-1.5 shadow-md">
+            <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] font-black uppercase tracking-wider">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>{selectedBook} Module Complete!</span>
+            </div>
+            <p className="text-sm sm:text-base font-black text-foreground">
+              You finished all 10 chapters of {selectedBook}!
+            </p>
+            <p className="text-xs text-muted-foreground font-semibold">
+              Ready to level up to {nextBookLevel} Level (CEFR {nextBookLevel === 'Intermediate' ? 'B1/B2' : 'B2/C1'})?
+            </p>
+          </div>
+        )}
 
         {/* 3 Result KPI Tiles in Brand Support Color */}
         <div className="grid grid-cols-3 gap-2.5">
@@ -756,25 +918,57 @@ export default function StudentGrammarRush() {
 
         {/* Action Buttons in Brand Colors (NO green button!) */}
         <div className="space-y-2.5 pt-1">
+          {/* PRIMARY BUTTON: Advance to next level, next chapter, or diploma */}
+          {isLastChapterOfBook && nextBookLevel ? (
+            <button
+              type="button"
+              onClick={() => handleAdvanceToNextBook(nextBookLevel)}
+              className="w-full h-14 rounded-2xl native-btn-primary font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2.5 shadow-[0_5px_0_#1C2068] active:translate-y-1 active:shadow-none transition-all cursor-pointer ring-2 ring-[#4FC3E8]/50"
+            >
+              <span>CONTINUE TO {nextBookLevel.toUpperCase()} LEVEL (LEVEL {nextBookLevel === 'Intermediate' ? '2' : '3'}) 🚀</span>
+              <ArrowRight className="w-5 h-5 text-[#4FC3E8]" />
+            </button>
+          ) : isLastChapterOfBook && !nextBookLevel ? (
+            <button
+              type="button"
+              onClick={() => setFullCertificateOpen(true)}
+              className="w-full h-14 rounded-2xl native-btn-gold font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2.5 shadow-[0_5px_0_#d97706] active:translate-y-1 active:shadow-none transition-all cursor-pointer"
+            >
+              <Trophy className="w-5 h-5" />
+              <span>VIEW ADVANCED MASTERY DIPLOMA 🎓</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleAdvanceToNextChapter(nextChapterNumber)}
+              className="w-full h-12 rounded-2xl native-btn-primary font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_5px_0_#1C2068] active:translate-y-1 active:shadow-none transition-all cursor-pointer"
+            >
+              <span>CONTINUE TO CHAPTER {nextChapterNumber}</span>
+              <ArrowRight className="w-5 h-5" />
+            </button>
+          )}
+
           {/* View Chapter Medal Button */}
           <button
             type="button"
             onClick={() => handleOpenMedal(selectedChapter)}
-            className="w-full h-12 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_4px_0_#b45309] active:translate-y-1 active:shadow-none transition-all cursor-pointer"
+            className="w-full h-11 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_4px_0_#b45309] active:translate-y-1 active:shadow-none transition-all cursor-pointer"
           >
             <Award className="w-4 h-4" />
             <span>Claim Chapter Completion Medal 🏅</span>
           </button>
 
+          {/* Return to Map Button */}
           <button
             type="button"
             onClick={() => setScreen('lobby')}
-            className="w-full h-12 rounded-2xl native-btn-primary font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_5px_0_#1C2068] active:translate-y-1 active:shadow-none transition-all cursor-pointer"
+            className="w-full h-11 rounded-2xl native-btn-ice font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_4px_0_#BAC9E2] active:translate-y-1 active:shadow-none transition-all cursor-pointer"
           >
-            <span>CONTINUE TO MAP</span>
-            <ArrowRight className="w-5 h-5" />
+            <Home className="w-4 h-4" />
+            <span>Return to Map</span>
           </button>
 
+          {/* Play Again Button */}
           <button
             type="button"
             onClick={() => handleStartRound()}
@@ -821,8 +1015,7 @@ export default function StudentGrammarRush() {
       <DuolingoTopBar
         selectedBook={selectedBook}
         onSelectBook={(b) => {
-          setSelectedBook(b);
-          setSelectedChapter('1');
+          changeSelectedBook(b, '1');
         }}
         streakCount={streakCount}
         gemsCount={totalGems}
@@ -845,6 +1038,7 @@ export default function StudentGrammarRush() {
                 onSelectChapter={handleOpenChapterModal}
                 onOpenGuidebook={handleOpenGuidebook}
                 onOpenFullCertificate={() => setFullCertificateOpen(true)}
+                onAdvanceLevel={handleAdvanceToNextBook}
               />
             </div>
 
@@ -894,6 +1088,25 @@ export default function StudentGrammarRush() {
                   <Award className="w-4 h-4" />
                   <span>{completedChaptersCount >= 10 ? 'View Full Certificate 🎓' : 'Certificate Details'}</span>
                 </button>
+
+                {/* Advance to next level button on sidebar when module is completed */}
+                {(completedChaptersCount >= 10 || (personalBests[`${selectedBook}_10`] || 0) > 0) &&
+                  (selectedBook === 'Beginner' ? 'Intermediate' : selectedBook === 'Intermediate' ? 'Advanced' : null) && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleAdvanceToNextBook(
+                          selectedBook === 'Beginner' ? 'Intermediate' : 'Advanced'
+                        )
+                      }
+                      className="w-full h-10 rounded-2xl native-btn-gold font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_4px_0_#E5A500] mt-1.5 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>
+                        Advance to {selectedBook === 'Beginner' ? 'Intermediate' : 'Advanced'} Level 🚀
+                      </span>
+                    </button>
+                  )}
               </div>
 
               {/* Active Chapter Snapshot Card */}
@@ -1038,6 +1251,7 @@ export default function StudentGrammarRush() {
         cefr={currentBookMeta.cefr}
         totalScore={totalGems}
         completedChaptersCount={completedChaptersCount}
+        onAdvanceLevel={handleAdvanceToNextBook}
       />
 
       {/* 7. Unit Guidebook Modal */}
