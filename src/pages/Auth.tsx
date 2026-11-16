@@ -33,11 +33,11 @@ const Auth: React.FC = () => {
       } else if (role === 'teacher') {
         navigate('/teacher', { replace: true });
       } else if (role === 'student') {
-        if (data.session?.user?.id) {
+        if (user?.id) {
           supabase
             .from('students')
             .update({ last_login_at: new Date().toISOString() })
-            .eq('id', data.session.user.id)
+            .eq('id', user.id)
             .then(() => {});
         }
         navigate('/student', { replace: true });
@@ -104,11 +104,12 @@ const Auth: React.FC = () => {
       } else if (role === 'teacher') {
         navigate('/teacher', { replace: true });
       } else if (role === 'student') {
-        if (data.session?.user?.id) {
+        const studentId = data.session?.user?.id || user?.id;
+        if (studentId) {
           supabase
             .from('students')
             .update({ last_login_at: new Date().toISOString() })
-            .eq('id', data.session.user.id)
+            .eq('id', studentId)
             .then(() => {});
         }
         navigate('/student', { replace: true });
