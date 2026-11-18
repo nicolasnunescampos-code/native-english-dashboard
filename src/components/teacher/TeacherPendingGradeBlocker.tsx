@@ -4,20 +4,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
 import { toLocalDate } from '@/lib/dateUtils';
-import { cleanStudentName, CLASS_LEVELS } from '@/lib/courseUtils';
+import { cleanStudentName } from '@/lib/courseUtils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { toast } from 'sonner';
 import {
   GraduationCap,
@@ -26,13 +16,8 @@ import {
   Calendar,
   LogOut,
   RefreshCw,
-  Sparkles,
   Loader2,
-  ExternalLink,
   ShieldAlert,
-  ChevronDown,
-  ChevronUp,
-  CheckCircle2,
 } from 'lucide-react';
 
 export interface PendingClass {
@@ -132,21 +117,6 @@ export const TeacherPendingGradeBlocker: React.FC = () => {
   // Absence State (inline confirmation per class id)
   const [confirmingAbsenceId, setConfirmingAbsenceId] = useState<number | null>(null);
   const [submittingAbsenceId, setSubmittingAbsenceId] = useState<number | null>(null);
-
-  // Quick Grade State (inline expansion per class id)
-  const [gradingClassId, setGradingClassId] = useState<number | null>(null);
-  const [overallGrade, setOverallGrade] = useState('');
-  const [speakingGrade, setSpeakingGrade] = useState('');
-  const [listeningGrade, setListeningGrade] = useState('');
-  const [grammarGrade, setGrammarGrade] = useState('');
-  const [readingGrade, setReadingGrade] = useState('');
-  const [classChapter, setClassChapter] = useState('');
-  const [classType, setClassType] = useState<string>('Grammar');
-  const [classLevel, setClassLevel] = useState<string>('Beginner');
-  const [feedbackNotes, setFeedbackNotes] = useState('');
-  const [showDetailedGrades, setShowDetailedGrades] = useState(false);
-  const [savingGradeId, setSavingGradeId] = useState<number | null>(null);
-  const [improvingFeedback, setImprovingFeedback] = useState(false);
 
   // Fetch teacher database ID
   useEffect(() => {
@@ -284,13 +254,6 @@ export const TeacherPendingGradeBlocker: React.FC = () => {
     toast.success('Classes refreshed');
   };
 
-  // Helper to parse grades
-  const parseGradeValue = (val: string) => {
-    if (!val || val.trim() === '') return null;
-    const num = parseFloat(val.replace(',', '.'));
-    return isNaN(num) ? null : num;
-  };
-
   // Handle Mark as Absent (Direct inline execution)
   const handleConfirmAbsence = async (cls: PendingClass) => {
     setSubmittingAbsenceId(cls.id);
@@ -328,125 +291,6 @@ export const TeacherPendingGradeBlocker: React.FC = () => {
     }
   };
 
-  // Toggle inline grading
-  const handleToggleGradeInline = (cls: PendingClass) => {
-    if (gradingClassId === cls.id) {
-      setGradingClassId(null);
-      return;
-    }
-    setGradingClassId(cls.id);
-    setOverallGrade('');
-    setSpeakingGrade('');
-    setListeningGrade('');
-    setGrammarGrade('');
-    setReadingGrade('');
-    setClassChapter(cls.class_chapter || '');
-    setClassType(cls.class_type || 'Grammar');
-    setClassLevel(cls.class_level || 'Beginner');
-    setFeedbackNotes(cls.notes || '');
-    setShowDetailedGrades(false);
-  };
-
-  // Handle AI feedback enhancement
-  const handleImproveFeedback = async () => {
-    if (!feedbackNotes.trim()) {
-      toast.error('Please enter some notes first before improving them.');
-      return;
-    }
-
-    setImprovingFeedback(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('improve-feedback', {
-        body: { feedback: feedbackNotes },
-      });
-
-      if (error) throw error;
-      if (data?.improvedFeedback) {
-        setFeedbackNotes(data.improvedFeedback);
-        toast.success('Feedback improved by AI!');
-      } else {
-        throw new Error('No improved feedback returned');
-      }
-    } catch (err) {
-      console.error('Error improving feedback:', err);
-      toast.error('Failed to improve feedback. Please try again.');
-    } finally {
-      setImprovingFeedback(false);
-    }
-  };
-
-  // Handle Save Quick Grade
-  const handleSaveGrade = async (e: React.FormEvent, cls: PendingClass) => {
-    e.preventDefault();
-
-    const parsedGrade = parseGradeValue(overallGrade);
-    if (parsedGrade === null) {
-      toast.error('Please enter a valid overall grade (0 - 10).');
-      return;
-    }
-
-    setSavingGradeId(cls.id);
-    try {
-      const payload: any = {
-        class_grade: parsedGrade,
-        speaking_grade: parseGradeValue(speakingGrade),
-        listening_grade: parseGradeValue(listeningGrade),
-        grammar_grade: parseGradeValue(grammarGrade),
-        reading_grade: parseGradeValue(readingGrade),
-        class_chapter: classChapter.trim() || null,
-        class_type: classType || null,
-        class_level: classLevel || null,
-        is_absent: false,
-        notes: feedbackNotes.trim() || null,
-      };
-
-      let { data, error } = await supabase
-        .from('classes')
-        .update(payload)
-        .eq('id', cls.id)
-        .select('*');
-
-      // Retry without listening_grade if column does not exist on schema
-      if (error && (error.code === '42703' || error.message?.includes('listening_grade'))) {
-        delete payload.listening_grade;
-        const retry = await supabase
-          .from('classes')
-          .update(payload)
-          .eq('id', cls.id)
-          .select('*');
-        if (retry.error) throw retry.error;
-        data = retry.data;
-      } else if (error) {
-        throw error;
-      }
-
-      if (!data || data.length === 0) {
-        toast.error('The update was rejected by the database. Check permissions.');
-        setSavingGradeId(null);
-        return;
-      }
-
-      const studentNameClean = cleanStudentName(cls.student_name);
-      toast.success(`Grades saved for ${studentNameClean}!`);
-
-      // Dispatch event to inform other components
-      window.dispatchEvent(new CustomEvent('class-graded', { detail: { classId: cls.id } }));
-
-      const updated = pendingClasses.filter((c) => c.id !== cls.id);
-      setPendingClasses(updated);
-      setGradingClassId(null);
-
-      if (updated.length === 0) {
-        toast.success('🎉 All pending classes resolved! Platform unlocked.');
-      }
-    } catch (err: any) {
-      console.error('Error saving grades:', err);
-      toast.error('Failed to save grades. Please try again.');
-    } finally {
-      setSavingGradeId(null);
-    }
-  };
-
   // Only teachers are subject to this requirement
   if (role !== 'teacher' || loading) {
     return null;
@@ -469,8 +313,6 @@ export const TeacherPendingGradeBlocker: React.FC = () => {
         const studentClean = cleanStudentName(cls.student_name);
         const isConfirmingAbsence = confirmingAbsenceId === cls.id;
         const isSubmittingAbsence = submittingAbsenceId === cls.id;
-        const isGradingInline = gradingClassId === cls.id;
-        const isSavingGrade = savingGradeId === cls.id;
 
         return (
           <div
@@ -545,10 +387,7 @@ export const TeacherPendingGradeBlocker: React.FC = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        setConfirmingAbsenceId(cls.id);
-                        if (gradingClassId === cls.id) setGradingClassId(null);
-                      }}
+                      onClick={() => setConfirmingAbsenceId(cls.id)}
                       className="flex-1 sm:flex-none border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/40 rounded-xl text-xs h-9"
                     >
                       <UserX className="w-3.5 h-3.5 mr-1.5" />
@@ -557,227 +396,16 @@ export const TeacherPendingGradeBlocker: React.FC = () => {
 
                     <Button
                       size="sm"
-                      onClick={() => handleToggleGradeInline(cls)}
-                      className={`flex-1 sm:flex-none rounded-xl text-xs h-9 shadow-xs ${
-                        isGradingInline
-                          ? 'bg-secondary text-secondary-foreground hover:bg-secondary/90'
-                          : 'bg-primary hover:bg-primary/90 text-primary-foreground'
-                      }`}
+                      onClick={() => navigate(`/teacher/grade?class=${cls.id}`)}
+                      className="flex-1 sm:flex-none rounded-xl text-xs h-9 shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground"
                     >
                       <GraduationCap className="w-3.5 h-3.5 mr-1.5" />
-                      {isGradingInline ? 'Close Form' : 'Grade Class'}
+                      Grade Class
                     </Button>
                   </>
                 )}
               </div>
             </div>
-
-            {/* Inline Quick Grade Form (Expands seamlessly inside this card) */}
-            {isGradingInline && (
-              <form
-                onSubmit={(e) => handleSaveGrade(e, cls)}
-                className="mt-4 pt-4 border-t border-border/70 space-y-3.5 animate-fade-in"
-              >
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold">
-                      Class Grade (0 - 10) <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      max="10"
-                      placeholder="e.g. 8.5"
-                      value={overallGrade}
-                      onChange={(e) => setOverallGrade(e.target.value)}
-                      required
-                      autoFocus
-                      className="rounded-xl h-10 text-sm"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold">Level</Label>
-                    <Select value={classLevel} onValueChange={setClassLevel}>
-                      <SelectTrigger className="rounded-xl h-10 text-xs">
-                        <SelectValue placeholder="Level" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CLASS_LEVELS.map((lvl) => (
-                          <SelectItem key={lvl} value={lvl} className="text-xs">
-                            {lvl}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold">Type</Label>
-                    <Select value={classType} onValueChange={setClassType}>
-                      <SelectTrigger className="rounded-xl h-10 text-xs">
-                        <SelectValue placeholder="Type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {['Grammar', 'Reading', 'Listening', 'Club', 'Exam'].map((t) => (
-                          <SelectItem key={t} value={t} className="text-xs">
-                            {t}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Chapter & Optional details toggle */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                  <div className="w-full sm:w-44">
-                    <Input
-                      placeholder="Chapter (e.g. 5)"
-                      value={classChapter}
-                      onChange={(e) => setClassChapter(e.target.value)}
-                      className="rounded-xl h-9 text-xs"
-                    />
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowDetailedGrades(!showDetailedGrades)}
-                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground font-medium"
-                  >
-                    <span>{showDetailedGrades ? 'Hide' : 'Add'} skill grades</span>
-                    {showDetailedGrades ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-
-                {/* Optional skills breakdown */}
-                {showDetailedGrades && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl bg-muted/30 border border-border/50">
-                    <div>
-                      <Label className="text-[10px] text-muted-foreground">Speaking</Label>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        max="10"
-                        placeholder="0 - 10"
-                        value={speakingGrade}
-                        onChange={(e) => setSpeakingGrade(e.target.value)}
-                        className="rounded-lg h-8 text-xs"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-[10px] text-muted-foreground">Grammar</Label>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        max="10"
-                        placeholder="0 - 10"
-                        value={grammarGrade}
-                        onChange={(e) => setGrammarGrade(e.target.value)}
-                        className="rounded-lg h-8 text-xs"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-[10px] text-muted-foreground">Listening</Label>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        max="10"
-                        placeholder="0 - 10"
-                        value={listeningGrade}
-                        onChange={(e) => setListeningGrade(e.target.value)}
-                        className="rounded-lg h-8 text-xs"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-[10px] text-muted-foreground">Reading</Label>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        max="10"
-                        placeholder="0 - 10"
-                        value={readingGrade}
-                        onChange={(e) => setReadingGrade(e.target.value)}
-                        className="rounded-lg h-8 text-xs"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Notes / Feedback */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-semibold">Feedback Notes</Label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleImproveFeedback}
-                      disabled={improvingFeedback || !feedbackNotes.trim()}
-                      className="h-6 text-[11px] text-primary hover:text-primary px-2 rounded-lg"
-                    >
-                      <Sparkles className={`w-3 h-3 mr-1 ${improvingFeedback ? 'animate-spin' : ''}`} />
-                      {improvingFeedback ? 'Improving...' : 'AI Improve'}
-                    </Button>
-                  </div>
-                  <Textarea
-                    placeholder="Write feedback for student..."
-                    value={feedbackNotes}
-                    onChange={(e) => setFeedbackNotes(e.target.value)}
-                    rows={2}
-                    className="rounded-xl text-xs resize-none"
-                  />
-                </div>
-
-                {/* Form Actions */}
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => navigate(`/teacher/grade?class=${cls.id}`)}
-                    className="text-xs text-muted-foreground hover:text-foreground h-9 px-2.5 rounded-xl"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                    Open Full Grade Page
-                  </Button>
-
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setGradingClassId(null)}
-                      disabled={isSavingGrade}
-                      className="rounded-xl text-xs h-9"
-                    >
-                      Cancel
-                    </Button>
-
-                    <Button
-                      type="submit"
-                      size="sm"
-                      disabled={isSavingGrade || !overallGrade}
-                      className="rounded-xl text-xs h-9 shadow-xs"
-                    >
-                      {isSavingGrade ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        'Save Grade'
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </form>
-            )}
           </div>
         );
       })}
