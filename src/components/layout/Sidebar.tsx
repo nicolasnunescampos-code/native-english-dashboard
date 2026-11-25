@@ -34,9 +34,11 @@ import {
   Mic,
   Smartphone,
   Zap,
+  Camera,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ModeToggle } from '@/components/mode-toggle'
+import { UserAvatar, AvatarUploadDialog } from '@/components/AvatarUploadModal'
 
 interface NavItem {
   label: string
@@ -150,7 +152,8 @@ const adminNavItems: NavItem[] = [
 
 export const Sidebar: React.FC = () => {
   const location = useLocation()
-  const { role, signOut, user, studentName, teacherName, rulesAgreed } = useAuth()
+  const { role, signOut, user, studentName, teacherName, rulesAgreed, avatarUrl } = useAuth()
+  const [avatarModalOpen, setAvatarModalOpen] = useState(false)
   const [open, setOpen] = useState(false)
   const [totalUnread, setTotalUnread] = useState(0)
   const [pendingLeadsCount, setPendingLeadsCount] = useState(0)
@@ -454,9 +457,23 @@ export const Sidebar: React.FC = () => {
       {/* Bottom Glass User Pod */}
       <div className="p-3.5 border-t border-white/40 dark:border-white/[0.08] shrink-0 space-y-2">
         <div className="liquid-glass-pill rounded-2xl p-3 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-sky-500/15 dark:bg-sky-400/20 border border-sky-400/30 flex items-center justify-center shrink-0 text-sky-600 dark:text-sky-300 font-bold text-xs">
-            {initials}
-          </div>
+          <button
+            type="button"
+            onClick={() => setAvatarModalOpen(true)}
+            title="Update profile picture"
+            className="relative group shrink-0 cursor-pointer rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-400"
+          >
+            <UserAvatar
+              src={avatarUrl}
+              initials={initials}
+              alt={displayName}
+              className="w-9 h-9"
+              textClassName="text-xs"
+            />
+            <span className="absolute inset-0 rounded-xl bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+              <Camera className="w-3.5 h-3.5" />
+            </span>
+          </button>
           <div className="overflow-hidden flex-1">
             <p className="text-xs font-bold text-foreground truncate">{displayName}</p>
             <p className="text-[11px] text-muted-foreground truncate">{user?.email}</p>
@@ -547,6 +564,13 @@ export const Sidebar: React.FC = () => {
       <aside className="hidden md:flex flex-col w-[268px] shrink-0 my-3.5 ml-3.5 h-[calc(100vh-1.75rem)] sticky top-3.5 rounded-[28px] liquid-glass-sidebar overflow-hidden">
         {SidebarContent}
       </aside>
+
+      <AvatarUploadDialog
+        open={avatarModalOpen}
+        onOpenChange={setAvatarModalOpen}
+        initials={initials}
+        displayName={displayName}
+      />
     </>
   )
 }

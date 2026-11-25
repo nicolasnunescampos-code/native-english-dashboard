@@ -14,6 +14,8 @@ interface AuthContextType {
   teacherName: string | null;
   rulesAgreed: boolean | null;
   updateRulesAgreed: (agreed: boolean) => void;
+  avatarUrl: string | null;
+  updateAvatarUrl: (url: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,6 +30,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [rulesAgreed, setRulesAgreed] = useState<boolean | null>(null);
 
   const [studentId, setStudentId] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  const updateAvatarUrl = (url: string | null) => {
+    setAvatarUrl(url);
+  };
 
   const deriveRoleFromSession = (session: Session | null): UserRole | null => {
     const rawRole = session?.user?.app_metadata?.role;
@@ -94,6 +101,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const nextRole = deriveRoleFromSession(nextSession);
       setRole(nextRole);
+
+      const metaAvatar = nextSession?.user?.user_metadata?.avatar_url;
+      setAvatarUrl(typeof metaAvatar === 'string' && metaAvatar.trim() ? metaAvatar : null);
 
       // Names are NOT used for authorization; reset whenever the auth user changes
       setStudentName(null);
@@ -195,6 +205,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setStudentId(null);
     setTeacherName(null);
     setRulesAgreed(null);
+    setAvatarUrl(null);
     localStorage.clear();
   };
 
@@ -210,7 +221,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       studentId,
       teacherName,
       rulesAgreed,
-      updateRulesAgreed
+      updateRulesAgreed,
+      avatarUrl,
+      updateAvatarUrl
     }}>
       {children}
     </AuthContext.Provider>
