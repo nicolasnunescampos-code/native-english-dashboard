@@ -114,11 +114,16 @@ export const getAccountBadgeStyle = (method: string) => {
   return 'bg-muted/80 text-foreground border-border';
 };
 
+type DisplayExpense = Expense & {
+  is_projected?: boolean;
+  source_expense_id?: string;
+};
+
 const CURRENCIES = ['BRL', 'USD', 'EUR', 'CAD'] as const;
 
 export default function AdminExpenses() {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [expenses, setExpenses] = useState<DisplayExpense[]>([]);
   const [loading, setLoading] = useState(true);
   const [tableMissing, setTableMissing] = useState(false);
   const [columnMissing, setColumnMissing] = useState(false);
@@ -139,7 +144,7 @@ export default function AdminExpenses() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSyncPayrollOpen, setIsSyncPayrollOpen] = useState(false);
-  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [editingExpense, setEditingExpense] = useState<DisplayExpense | null>(null);
 
   // Form State
   const [formData, setFormData] = useState<{
@@ -168,6 +173,9 @@ export default function AdminExpenses() {
 
   const monthStart = format(startOfMonth(currentDate), 'yyyy-MM-dd');
   const monthEnd = format(endOfMonth(currentDate), 'yyyy-MM-dd');
+  const payrollDate = subMonths(currentDate, 1);
+  const payrollMonthStart = format(startOfMonth(payrollDate), 'yyyy-MM-dd');
+  const payrollMonthEnd = format(endOfMonth(payrollDate), 'yyyy-MM-dd');
 
   // Load all data
   const fetchData = async () => {
@@ -189,7 +197,48 @@ export default function AdminExpenses() {
         }
       } else {
         setTableMissing(false);
-        setExpenses(expData || []);
+        const monthExpenses: DisplayExpense[] = expData || [];
+
+        // Project recurring expenses from earlier months that don't yet have an entry this month
+        const { data: recurringData } = await supabase
+          .from('expenses')
+          .select('*')
+          .eq('is_recurring', true)
+          .lt('due_date', monthStart)
+          .order('due_date', { ascending: false });
+
+        if (recurringData && recurringData.length > 0) {
+          const existingKeys = new Set(
+            monthExpenses.map((e) => `${e.title.trim().toLowerCase()}__${e.category}`)
+          );
+          const seenRecurringKeys = new Set<string>();
+          const targetYear = currentDate.getFullYear();
+          const targetMonth = currentDate.getMonth();
+          const maxDayInMonth = endOfMonth(currentDate).getDate();
+
+          for (const tmpl of recurringData) {
+            const key = `${(tmpl.title || '').trim().toLowerCase()}__${tmpl.category}`;
+            if (existingKeys.has(key) || seenRecurringKeys.has(key)) continue;
+            seenRecurringKeys.add(key);
+
+            const origDay = new Date(`${tmpl.due_date}T00:00:00`).getDate();
+            const targetDay = Math.min(origDay || 1, maxDayInMonth);
+            const projectedDueDate = format(new Date(targetYear, targetMonth, targetDay), 'yyyy-MM-dd');
+
+            monthExpenses.push({
+              ...tmpl,
+              id: `projected-${tmpl.id}-${monthStart}`,
+              due_date: projectedDueDate,
+              status: 'pending',
+              is_projected: true,
+              source_expense_id: tmpl.id,
+            });
+          }
+
+          monthExpenses.sort((a, b) => b.due_date.localeCompare(a.due_date));
+        }
+
+        setExpenses(monthExpenses);
       }
 
       // 2. Fetch Student Revenue for this month (paid payments)
@@ -210,23 +259,42 @@ export default function AdminExpenses() {
       });
       setMonthlyRevenue(revenueBRL);
 
-      // 3. Compute Teacher Payroll for this month from classes & rates
+      // 3. Compute Teacher Payroll from previous month's classes & rates
       const { data: teachersData } = await supabase
         .from('teachers')
         .select('id, name, class_rate');
 
-      const { data: classesData } = await supabase
-        .from('classes')
-        .select('title, date, time, class_grade, is_absent')
-        .gte('date', monthStart)
-        .lte('date', monthEnd)
-        .not('class_grade', 'is', null);
+      const classesData: { title: string; date: string; time: string; class_grade: number | null; is_absent: boolean | null }[] = [];
+      const pageSize = 1000;
+      let from = 0;
 
-      if (teachersData && classesData) {
+      while (true) {
+        const { data: cPage, error: cErr } = await supabase
+          .from('classes')
+          .select('id, title, date, time, class_grade, is_absent')
+          .gte('date', payrollMonthStart)
+          .lte('date', payrollMonthEnd)
+          .not('class_grade', 'is', null)
+          .order('date', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, from + pageSize - 1);
+
+        if (cErr) throw cErr;
+        if (cPage && cPage.length > 0) classesData.push(...cPage);
+        if (!cPage || cPage.length < pageSize) break;
+        from += pageSize;
+      }
+
+      if (teachersData) {
+        const excludedNames = ['nicolas', 'mariana'];
+        const activeTeachers = teachersData.filter(
+          (t) => !excludedNames.some((ex) => t.name.toLowerCase().includes(ex))
+        );
+
         let totalPayroll = 0;
         const breakdown: { name: string; amount: number; count: number }[] = [];
 
-        teachersData.forEach((t) => {
+        activeTeachers.forEach((t) => {
           const tClasses = classesData.filter((c) => {
             const parts = (c.title || '').split(' - ');
             const tName = parts.length > 1 ? parts[1].trim().toLowerCase() : (c.title || '').toLowerCase();
@@ -365,7 +433,7 @@ export default function AdminExpenses() {
     setIsAddOpen(true);
   };
 
-  const handleOpenEdit = (expense: Expense) => {
+  const handleOpenEdit = (expense: DisplayExpense) => {
     setEditingExpense(expense);
     const method = getExpensePaymentMethod(expense);
     const isPreset = (PAYMENT_METHODS as readonly string[]).filter((m) => m !== 'Other').includes(method);
@@ -398,7 +466,7 @@ export default function AdminExpenses() {
         : formData.payment_method;
 
     try {
-      if (editingExpense) {
+      if (editingExpense && !editingExpense.is_projected) {
         const updatePayload: any = {
           title: formData.title.trim(),
           category: formData.category,
@@ -483,14 +551,16 @@ export default function AdminExpenses() {
               { duration: 6000 }
             );
             setIsAddOpen(false);
+            setIsEditOpen(false);
             fetchData();
             return;
           }
           throw error;
         }
 
-        toast.success('Expense added successfully');
+        toast.success(editingExpense?.is_projected ? 'Expense updated successfully' : 'Expense added successfully');
         setIsAddOpen(false);
+        setIsEditOpen(false);
       }
       fetchData();
     } catch (err: any) {
@@ -499,12 +569,35 @@ export default function AdminExpenses() {
     }
   };
 
-  const handleDeleteExpense = async (id?: string) => {
-    if (!id) return;
+  const handleDeleteExpense = async (expense: DisplayExpense) => {
+    if (expense.is_projected) {
+      if (!window.confirm('This is a recurring expense from a previous month. Stop recurring it in future months?')) {
+        return;
+      }
+      try {
+        const { error } = await supabase
+          .from('expenses')
+          .update({ is_recurring: false })
+          .eq('title', expense.title)
+          .eq('category', expense.category)
+          .eq('is_recurring', true)
+          .lt('due_date', monthStart);
+
+        if (error) throw error;
+        toast.success('Recurring expense stopped');
+        fetchData();
+      } catch (err: any) {
+        console.error('Error stopping recurring expense:', err);
+        toast.error('Failed to stop recurring expense');
+      }
+      return;
+    }
+
+    if (!expense.id) return;
     if (!window.confirm('Are you sure you want to delete this expense?')) return;
 
     try {
-      const { error } = await supabase.from('expenses').delete().eq('id', id);
+      const { error } = await supabase.from('expenses').delete().eq('id', expense.id);
       if (error) throw error;
       toast.success('Expense deleted');
       fetchData();
@@ -514,15 +607,46 @@ export default function AdminExpenses() {
     }
   };
 
-  const handleToggleStatus = async (expense: Expense) => {
+  const handleToggleStatus = async (expense: DisplayExpense) => {
     const newStatus = expense.status === 'paid' ? 'pending' : 'paid';
     try {
-      const { error } = await supabase
-        .from('expenses')
-        .update({ status: newStatus })
-        .eq('id', expense.id);
+      if (expense.is_projected) {
+        const method = getExpensePaymentMethod(expense);
+        const cleanNotes = getDisplayNotes(expense.notes);
+        const insertPayload: any = {
+          title: expense.title,
+          category: expense.category,
+          amount: expense.amount,
+          currency: expense.currency,
+          due_date: expense.due_date,
+          status: newStatus,
+          payment_method: method,
+          is_recurring: true,
+          notes: cleanNotes || null,
+        };
 
-      if (error) throw error;
+        const { error } = await supabase.from('expenses').insert(insertPayload);
+        if (error) {
+          if (error.code === '42703' || error.message?.includes('payment_method')) {
+            setColumnMissing(true);
+            delete insertPayload.payment_method;
+            insertPayload.notes = cleanNotes
+              ? `[Paid via: ${method}] ${cleanNotes}`
+              : `[Paid via: ${method}]`;
+            const retry = await supabase.from('expenses').insert(insertPayload);
+            if (retry.error) throw retry.error;
+          } else {
+            throw error;
+          }
+        }
+      } else {
+        const { error } = await supabase
+          .from('expenses')
+          .update({ status: newStatus })
+          .eq('id', expense.id);
+
+        if (error) throw error;
+      }
       toast.success(`Expense marked as ${newStatus}`);
       fetchData();
     } catch (err) {
@@ -532,17 +656,17 @@ export default function AdminExpenses() {
 
   // Sync Teacher Payroll into Expenses
   const handleSyncTeacherPayroll = async () => {
+    const payrollMonthLabel = format(payrollDate, 'MMMM yyyy');
     if (teacherPayrollTotal <= 0) {
-      toast.error('No teacher payroll found for this month.');
+      toast.error(`No teacher payroll found for ${payrollMonthLabel}.`);
       return;
     }
 
     try {
+      const title = `Teacher Payroll (${payrollMonthLabel})`;
       const existingPayroll = expenses.find(
-        (e) => e.category === 'Teacher Payments' && e.title.includes('Teacher Payroll')
+        (e) => !e.is_projected && e.category === 'Teacher Payments' && e.title === title
       );
-
-      const title = `Teacher Payroll (${format(currentDate, 'MMMM yyyy')})`;
 
       if (existingPayroll) {
         let updatePayroll: any = {
@@ -550,7 +674,7 @@ export default function AdminExpenses() {
           due_date: format(endOfMonth(currentDate), 'yyyy-MM-dd'),
           status: 'paid',
           payment_method: "Company's Nubank",
-          notes: `Calculated from ${teachersBreakdown.length} active teachers.`,
+          notes: `Calculated from ${teachersBreakdown.length} active teachers (${payrollMonthLabel} classes).`,
         };
         let { error } = await supabase
           .from('expenses')
@@ -559,7 +683,7 @@ export default function AdminExpenses() {
 
         if (error && (error.code === '42703' || error.message?.includes('payment_method'))) {
           delete updatePayroll.payment_method;
-          updatePayroll.notes = `[Paid via: Company's Nubank] Calculated from ${teachersBreakdown.length} active teachers.`;
+          updatePayroll.notes = `[Paid via: Company's Nubank] Calculated from ${teachersBreakdown.length} active teachers (${payrollMonthLabel} classes).`;
           const retry = await supabase.from('expenses').update(updatePayroll).eq('id', existingPayroll.id);
           if (retry.error) throw retry.error;
         } else if (error) {
@@ -575,14 +699,14 @@ export default function AdminExpenses() {
           due_date: format(endOfMonth(currentDate), 'yyyy-MM-dd'),
           status: 'paid',
           payment_method: "Company's Nubank",
-          is_recurring: true,
-          notes: `Calculated from ${teachersBreakdown.length} active teachers.`,
+          is_recurring: false,
+          notes: `Calculated from ${teachersBreakdown.length} active teachers (${payrollMonthLabel} classes).`,
         };
         let { error } = await supabase.from('expenses').insert(insertPayroll);
 
         if (error && (error.code === '42703' || error.message?.includes('payment_method'))) {
           delete insertPayroll.payment_method;
-          insertPayroll.notes = `[Paid via: Company's Nubank] Calculated from ${teachersBreakdown.length} active teachers.`;
+          insertPayroll.notes = `[Paid via: Company's Nubank] Calculated from ${teachersBreakdown.length} active teachers (${payrollMonthLabel} classes).`;
           const retry = await supabase.from('expenses').insert(insertPayroll);
           if (retry.error) throw retry.error;
         } else if (error) {
@@ -1136,7 +1260,7 @@ CREATE POLICY "Enable delete for all" ON public.expenses FOR DELETE USING (true)
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleDeleteExpense(exp.id)}
+                          onClick={() => handleDeleteExpense(exp)}
                           className="h-8 w-8 text-muted-foreground hover:text-rose-600"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1367,10 +1491,10 @@ CREATE POLICY "Enable delete for all" ON public.expenses FOR DELETE USING (true)
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Wallet className="w-5 h-5 text-blue-600" />
-              Sync Teacher Payroll for {format(currentDate, 'MMMM yyyy')}
+              Sync Teacher Payroll ({format(payrollDate, 'MMMM yyyy')} Classes)
             </DialogTitle>
             <DialogDescription>
-              Automatically log the calculated teacher payments from completed classes as an operational expense.
+              Automatically log the calculated teacher payments from {format(payrollDate, 'MMMM yyyy')} completed classes as a {format(currentDate, 'MMMM yyyy')} operational expense.
             </DialogDescription>
           </DialogHeader>
 

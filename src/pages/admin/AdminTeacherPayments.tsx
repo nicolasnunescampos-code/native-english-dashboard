@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { format, startOfMonth, endOfMonth, getWeekOfMonth, parseISO, getWeeksInMonth, startOfWeek, endOfWeek, addDays, subDays, isBefore, isAfter, max, min } from 'date-fns'
 import { toast } from 'sonner'
@@ -126,6 +126,7 @@ export default function AdminTeacherPayments() {
   const [syncingConfirmation, setSyncingConfirmation] = useState(false)
 
   const [confirmations, setConfirmations] = useState<any[]>([])
+  const loadRequestIdRef = useRef(0)
 
   const [selectedReceipt, setSelectedReceipt] = useState<TeacherPaymentRow | null>(null)
 
@@ -154,39 +155,78 @@ export default function AdminTeacherPayments() {
   }
 
   const loadData = async () => {
+    const requestId = ++loadRequestIdRef.current
     setLoading(true)
+    setClasses([])
+    setConfirmations([])
+
     const monthStart = format(startOfMonth(currentDate), 'yyyy-MM-dd')
     const monthEnd = format(endOfMonth(currentDate), 'yyyy-MM-dd')
 
-    // Fetch teachers
-    const { data: tData } = await supabase.from('teachers').select('id, name, class_rate').order('name', { ascending: true })
-    if (tData) {
-      const excludedNames = ['nicolas', 'mariana']
-      setTeachers(tData.filter(t => !excludedNames.some(ex => t.name.toLowerCase().includes(ex))))
+    try {
+      // Fetch teachers
+      const { data: tData, error: tError } = await supabase
+        .from('teachers')
+        .select('id, name, class_rate')
+        .order('name', { ascending: true })
+      if (tError) throw tError
+      if (requestId !== loadRequestIdRef.current) return
+
+      if (tData) {
+        const excludedNames = ['nicolas', 'mariana']
+        setTeachers(tData.filter(t => !excludedNames.some(ex => t.name.toLowerCase().includes(ex))))
+      }
+
+      // Fetch ALL classes for this month (paginated to avoid Supabase 1000-row cap dropping later weeks)
+      const allClasses: ClassRecord[] = []
+      const pageSize = 1000
+      let from = 0
+
+      while (true) {
+        const { data: cPage, error: cError } = await supabase
+          .from('classes')
+          .select('id, title, date, time, class_grade, is_absent, student_name')
+          .gte('date', monthStart)
+          .lte('date', monthEnd)
+          .order('date', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, from + pageSize - 1)
+
+        if (cError) throw cError
+        if (requestId !== loadRequestIdRef.current) return
+
+        if (cPage && cPage.length > 0) {
+          allClasses.push(...cPage)
+        }
+        if (!cPage || cPage.length < pageSize) break
+        from += pageSize
+      }
+
+      setClasses(allClasses)
+
+      // Fetch weekly confirmations for this month's range
+      const searchStart = format(subDays(startOfMonth(currentDate), 7), 'yyyy-MM-dd')
+      const searchEnd = format(addDays(endOfMonth(currentDate), 7), 'yyyy-MM-dd')
+
+      const { data: confData, error: confError } = await supabase
+        .from('teacher_weekly_confirmations')
+        .select('*')
+        .gte('week_start_date', searchStart)
+        .lte('week_start_date', searchEnd)
+
+      if (confError) throw confError
+      if (requestId !== loadRequestIdRef.current) return
+
+      if (confData) setConfirmations(confData)
+    } catch (err: any) {
+      if (requestId !== loadRequestIdRef.current) return
+      console.error('Error loading teacher payments data:', err)
+      toast.error('Failed to load teacher payments data')
+    } finally {
+      if (requestId === loadRequestIdRef.current) {
+        setLoading(false)
+      }
     }
-
-    // Fetch ALL classes for this month (graded, absent, or scheduled)
-    const { data: cData } = await supabase
-      .from('classes')
-      .select('id, title, date, time, class_grade, is_absent, student_name')
-      .gte('date', monthStart)
-      .lte('date', monthEnd)
-
-    if (cData) setClasses(cData)
-
-    // Fetch weekly confirmations for this month's range
-    const searchStart = format(subDays(startOfMonth(currentDate), 7), 'yyyy-MM-dd')
-    const searchEnd = format(addDays(endOfMonth(currentDate), 7), 'yyyy-MM-dd')
-
-    const { data: confData } = await supabase
-      .from('teacher_weekly_confirmations')
-      .select('*')
-      .gte('week_start_date', searchStart)
-      .lte('week_start_date', searchEnd)
-
-    if (confData) setConfirmations(confData)
-
-    setLoading(false)
   }
 
   const fetchTeacherExpenses = async () => {
@@ -405,7 +445,8 @@ export default function AdminTeacherPayments() {
           const eDate = format(w.end, 'yyyy-MM-dd')
           return session.date >= sDate && session.date <= eDate
         })
-        const weekNum = weekIndex >= 0 ? weekIndex + 1 : 1
+        if (weekIndex === -1) continue
+        const weekNum = weekIndex + 1
         
         if (!weekDetails[weekNum]) {
           weekDetails[weekNum] = { graded: [], absent: [], scheduled: [] }
