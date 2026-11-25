@@ -456,6 +456,38 @@ const StudentHistory: React.FC = () => {
             </CardContent>
           </Card>
 
+          {/* Recent Grammar Whiteboards (if any active within 10 days) */}
+          {(() => {
+            const recentWhiteboards = classes
+              .map((cls) => ({ cls, wbUrl: extractWhiteboardUrl(cls) }))
+              .filter((item): item is { cls: Class; wbUrl: string } => !!item.wbUrl);
+            if (recentWhiteboards.length === 0) return null;
+            return (
+              <Card className="rounded-2xl border border-indigo-200/70 dark:border-indigo-900/40 bg-card shadow-sm">
+                <CardContent className="p-6 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-bold text-base text-foreground">
+                      Recent Grammar Whiteboard Screenshots
+                    </h3>
+                    <Badge variant="secondary" className="text-xs">
+                      {recentWhiteboards.length} available
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {recentWhiteboards.map(({ cls, wbUrl }) => (
+                      <WhiteboardViewer
+                        key={cls.id}
+                        url={wbUrl}
+                        classDate={cls.date}
+                        subtitle={`${cls.title || 'Grammar Class'} • ${format(parseISO(cls.date), 'MMMM d, yyyy')}`}
+                      />
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
           {/* Grade Evolution Card */}
           <Card className="rounded-2xl border bg-card shadow-sm">
             <CardContent className="p-6">
@@ -758,6 +790,17 @@ const StudentHistory: React.FC = () => {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
+                      {(() => {
+                        const wbUrl = extractWhiteboardUrl(cls);
+                        return wbUrl ? (
+                          <WhiteboardViewer
+                            url={wbUrl}
+                            classDate={cls.date}
+                            compact
+                            subtitle={`${cls.title || 'Grammar Class'} • ${format(parseISO(cls.date), 'MMMM d, yyyy')}`}
+                          />
+                        ) : null;
+                      })()}
                       {cls.is_absent ? (
                         <Badge variant="destructive" className="text-xs">Absent</Badge>
                       ) : (

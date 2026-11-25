@@ -244,6 +244,93 @@ export const StudentNotifier: React.FC = () => {
     });
   }, [navigate]);
 
+  // Handle class graded / added to student's Class History
+  const handleClassHistoryAdded = useCallback(async (classInfo: any) => {
+    playClassSound();
+
+    const dateStr = classInfo.date
+      ? new Date(classInfo.date + 'T00:00:00').toLocaleDateString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+        })
+      : '';
+    const isAbsent = !!classInfo.is_absent;
+    const hasWhiteboard =
+      !!classInfo.whiteboard_url ||
+      (typeof classInfo.notes === 'string' && classInfo.notes.includes('[Whiteboard:'));
+
+    const headline = isAbsent
+      ? 'Class Marked as Absent'
+      : classInfo.class_type === 'Grammar' && hasWhiteboard
+      ? 'New Grammar Class & Whiteboard Added!'
+      : 'New Class History Added!';
+
+    const bodyText = isAbsent
+      ? `Your class on ${dateStr || 'today'} was marked as absent.`
+      : `Grade: ${classInfo.class_grade}/10${classInfo.class_type ? ` (${classInfo.class_type})` : ''}${
+          hasWhiteboard ? ' • Whiteboard screenshot available for 10 days!' : ''
+        }`;
+
+    // 1. Native Mobile / OS System Notification
+    await triggerDeviceNotification({
+      title: `📚 ${headline}`,
+      body: bodyText,
+      icon: '/pwa-192x192.png',
+      badge: '/pwa-192x192.png',
+      tag: `history-${classInfo.id || Date.now()}`,
+      url: '/student/history',
+      vibrate: [180, 80, 180],
+    });
+
+    // 2. In-App Rich Toast
+    toast.custom((t) => (
+      <div className="bg-card text-card-foreground border border-indigo-400/40 dark:border-indigo-500/50 shadow-2xl rounded-xl p-3.5 flex flex-col gap-2 max-w-sm w-full animate-in slide-in-from-top-4 duration-300 ring-2 ring-indigo-500/20">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                Class History Updated
+              </p>
+              <h4 className="font-semibold text-sm leading-tight text-foreground">
+                {headline}
+              </h4>
+            </div>
+          </div>
+          <button
+            onClick={() => toast.dismiss(t)}
+            className="text-muted-foreground hover:text-foreground p-1 rounded"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-md">
+          {dateStr ? `${dateStr} • ` : ''}
+          {bodyText}
+        </p>
+
+        <div className="flex justify-end pt-1">
+          <Button
+            size="sm"
+            className="h-7 text-xs px-3 font-medium bg-indigo-600 hover:bg-indigo-700 text-white"
+            onClick={() => {
+              navigate('/student/history');
+              toast.dismiss(t);
+            }}
+          >
+            View History
+          </Button>
+        </div>
+      </div>
+    ), {
+      duration: 15000,
+      position: 'top-right',
+    });
+  }, [navigate]);
+
   // Set up Supabase Realtime listeners for this student
   useEffect(() => {
     if (role !== 'student' || !user?.id) return;
@@ -297,9 +384,9 @@ export const StudentNotifier: React.FC = () => {
         .subscribe();
     }
 
-    // 3. Realtime listener for legacy classes table matching student name
+    // 3. Realtime listener for classes table (new scheduled classes + newly graded class history)
     let classesChannel: any = null;
-    if (studentName) {
+    if (studentName || targetStudentId) {
       classesChannel = supabase
         .channel(`student_classes_direct_${user.id}`)
         .on(
@@ -311,8 +398,55 @@ export const StudentNotifier: React.FC = () => {
           },
           (payload) => {
             const newClass = payload.new as any;
-            if (newClass?.student_name && newClass.student_name.toLowerCase().includes(studentName.toLowerCase())) {
+            if (
+              studentName &&
+              newClass?.student_name &&
+              newClass.student_name.toLowerCase().includes(studentName.toLowerCase())
+            ) {
               handleNewClass(newClass);
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'classes',
+          },
+          async (payload) => {
+            const newClass = payload.new as any;
+            const oldClass = payload.old as any;
+            if (!newClass) return;
+
+            const newlyGraded =
+              newClass.class_grade !== null &&
+              newClass.class_grade !== undefined &&
+              (oldClass?.class_grade === null || oldClass?.class_grade === undefined);
+            const newlyAbsent = !!newClass.is_absent && !oldClass?.is_absent;
+
+            if (!newlyGraded && !newlyAbsent) return;
+
+            const matchesName =
+              !!studentName &&
+              typeof newClass.student_name === 'string' &&
+              newClass.student_name.toLowerCase().includes(studentName.toLowerCase());
+
+            if (matchesName) {
+              handleClassHistoryAdded(newClass);
+              return;
+            }
+
+            if (targetStudentId && newClass.id) {
+              const { data: assign } = await supabase
+                .from('class_assignments')
+                .select('id')
+                .eq('class_id', newClass.id)
+                .eq('student_id', targetStudentId)
+                .maybeSingle();
+              if (assign) {
+                handleClassHistoryAdded(newClass);
+              }
             }
           }
         )
@@ -324,7 +458,7 @@ export const StudentNotifier: React.FC = () => {
       if (assignmentChannel) supabase.removeChannel(assignmentChannel);
       if (classesChannel) supabase.removeChannel(classesChannel);
     };
-  }, [role, user?.id, studentId, studentName, handleNewMessage, handleNewClass]);
+  }, [role, user?.id, studentId, studentName, handleNewMessage, handleNewClass, handleClassHistoryAdded]);
 
   // Periodic ticker: Check upcoming classes today and trigger 30-minute reminder
   useEffect(() => {
