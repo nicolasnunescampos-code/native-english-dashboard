@@ -3,7 +3,7 @@ import { addDays, differenceInCalendarDays, parseISO } from 'date-fns';
 
 export const WHITEBOARD_RETENTION_DAYS = 10;
 
-const WHITEBOARD_TAG_REGEX = /\[Whiteboard:\s*(https?:\/\/[^\s\]]+)\]/i;
+const WHITEBOARD_TAG_REGEX = /\[Whiteboard:\s*((?:https?:\/\/|data:image\/)[^\s\]]+)\]/i;
 
 export type WhiteboardStatus = {
   url: string;
@@ -31,8 +31,8 @@ export function extractRawWhiteboardUrl(
 }
 
 /**
- * Returns the whiteboard URL and 14-day expiration metadata.
- * Returns `null` if no screenshot exists or if it has expired (> 14 days since class date).
+ * Returns the whiteboard URL and 10-day expiration metadata.
+ * Returns `null` if no screenshot exists or if it has expired (> 10 days since class date).
  */
 export function getWhiteboardStatus(
   cls?: { date?: string; whiteboard_url?: string | null; notes?: string | null } | null
@@ -71,7 +71,7 @@ export function extractWhiteboardUrl(
 export function stripWhiteboardTag(notes?: string | null): string {
   if (!notes) return '';
   return notes
-    .replace(/\[Whiteboard:\s*https?:\/\/[^\s\]]+\]/gi, '')
+    .replace(/\[Whiteboard:\s*(?:https?:\/\/|data:image\/)[^\s\]]+\]/gi, '')
     .trim();
 }
 
@@ -84,34 +84,95 @@ export function appendWhiteboardTag(notes: string | null | undefined, url: strin
   return cleaned ? `${cleaned}\n[Whiteboard: ${url}]` : `[Whiteboard: ${url}]`;
 }
 
+async function compressWhiteboardImage(
+  file: File,
+  maxDimension = 1280,
+  quality = 0.78
+): Promise<{ blob: Blob; ext: string; mimeType: string }> {
+  const bitmapUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('Could not load screenshot image'));
+      el.src = bitmapUrl;
+    });
+
+    const scale = Math.min(1, maxDimension / Math.max(img.naturalWidth, img.naturalHeight));
+    const width = Math.max(1, Math.round(img.naturalWidth * scale));
+    const height = Math.max(1, Math.round(img.naturalHeight * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D context unavailable');
+    ctx.drawImage(img, 0, 0, width, height);
+
+    const encode = (type: string, q: number) =>
+      new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, q));
+
+    let blob = await encode('image/webp', quality);
+    let ext = 'webp';
+    let mimeType = 'image/webp';
+
+    if (!blob || blob.type !== 'image/webp') {
+      blob = await encode('image/jpeg', quality);
+      ext = 'jpg';
+      mimeType = 'image/jpeg';
+    }
+
+    if (!blob) throw new Error('Failed to compress screenshot');
+    return { blob, ext, mimeType };
+  } finally {
+    URL.revokeObjectURL(bitmapUrl);
+  }
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') resolve(reader.result);
+      else reject(new Error('Failed to read screenshot data'));
+    };
+    reader.onerror = () => reject(new Error('Failed to read screenshot data'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 /**
- * Uploads a whiteboard screenshot image to Supabase Storage (`thumbnails` bucket)
- * and returns its public URL.
+ * Compresses and uploads a whiteboard screenshot to Supabase Storage (`thumbnails/whiteboards/`).
+ * If Storage RLS blocks non-admin uploads (400/403), automatically falls back to a compact
+ * compressed WebP data URL so teachers can always save Grammar grades without interruption.
  */
 export async function uploadWhiteboardScreenshot(
   file: File,
   classId: number | string
 ): Promise<string> {
-  const extFromName = file.name.includes('.') ? file.name.split('.').pop() : '';
-  const extFromMime = file.type.split('/')[1] || 'png';
-  const ext = (extFromName || extFromMime).replace(/[^a-zA-Z0-9]/g, '') || 'png';
+  const { blob, ext, mimeType } = await compressWhiteboardImage(file, 1280, 0.78);
   const filePath = `whiteboards/${classId}_${Date.now()}.${ext}`;
 
   const { error: uploadError } = await supabase.storage
     .from('thumbnails')
-    .upload(filePath, file, {
-      contentType: file.type || 'image/png',
+    .upload(filePath, blob, {
+      contentType: mimeType,
       upsert: false,
     });
 
-  if (uploadError) throw uploadError;
+  if (!uploadError) {
+    const { data } = supabase.storage.from('thumbnails').getPublicUrl(filePath);
+    return data.publicUrl;
+  }
 
-  const { data } = supabase.storage.from('thumbnails').getPublicUrl(filePath);
-  return data.publicUrl;
+  // Fallback when Storage RLS blocks teacher uploads to `thumbnails`
+  const { blob: compactBlob } = await compressWhiteboardImage(file, 1100, 0.72);
+  return blobToDataUrl(compactBlob);
 }
 
 /**
- * Best-effort cleanup of whiteboard screenshots older than 14 days from Supabase Storage
+ * Best-effort cleanup of whiteboard screenshots older than 10 days from Supabase Storage
  * (`thumbnails/whiteboards/`) and `classes.whiteboard_url`. Runs at most once per browser session.
  */
 export async function cleanupExpiredWhiteboards(): Promise<void> {
@@ -142,7 +203,7 @@ export async function cleanupExpiredWhiteboards(): Promise<void> {
       }
     }
 
-    // Clear expired whiteboard_url references on classes older than 14 days
+    // Clear expired whiteboard_url references on classes older than 10 days
     const cutoffDate = addDays(new Date(), -WHITEBOARD_RETENTION_DAYS - 1)
       .toISOString()
       .slice(0, 10);
