@@ -246,6 +246,14 @@ export const StudentNotifier: React.FC = () => {
 
   // Handle class graded / added to student's Class History
   const handleClassHistoryAdded = useCallback(async (classInfo: any) => {
+    if (user?.id) {
+      localStorage.setItem(`student_has_new_history_${user.id}`, '1');
+      if (classInfo?.id) {
+        localStorage.setItem(`student_latest_history_id_${user.id}`, String(classInfo.id));
+      }
+      window.dispatchEvent(new CustomEvent('student-history-updated'));
+    }
+
     playClassSound();
 
     const dateStr = classInfo.date

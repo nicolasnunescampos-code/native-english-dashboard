@@ -158,6 +158,7 @@ export const Sidebar: React.FC = () => {
   const [totalUnread, setTotalUnread] = useState(0)
   const [pendingLeadsCount, setPendingLeadsCount] = useState(0)
   const [pendingRecupsCount, setPendingRecupsCount] = useState(0)
+  const [hasNewHistory, setHasNewHistory] = useState(false)
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     Classes: false,
     Users: false,
@@ -273,6 +274,65 @@ export const Sidebar: React.FC = () => {
       supabase.removeChannel(channel)
     }
   }, [user?.id])
+
+  React.useEffect(() => {
+    if (role !== 'student' || !user?.id) {
+      setHasNewHistory(false)
+      return
+    }
+
+    if (location.pathname === '/student/history') {
+      localStorage.removeItem(`student_has_new_history_${user.id}`)
+      setHasNewHistory(false)
+    } else if (localStorage.getItem(`student_has_new_history_${user.id}`) === '1') {
+      setHasNewHistory(true)
+    }
+
+    const checkLatestHistory = async () => {
+      if (location.pathname === '/student/history' || !studentName) return
+      const { data } = await supabase
+        .from('classes')
+        .select('id, date')
+        .ilike('student_name', `%${studentName}%`)
+        .or('class_grade.not.is.null,is_absent.eq.true')
+        .order('date', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (data?.id) {
+        const seenId = localStorage.getItem(`student_seen_history_id_${user.id}`)
+        if (seenId && String(data.id) !== seenId) {
+          localStorage.setItem(`student_has_new_history_${user.id}`, '1')
+          setHasNewHistory(true)
+        } else if (!seenId) {
+          const today = new Date().toISOString().slice(0, 10)
+          if (data.date === today) {
+            localStorage.setItem(`student_has_new_history_${user.id}`, '1')
+            setHasNewHistory(true)
+          } else {
+            localStorage.setItem(`student_seen_history_id_${user.id}`, String(data.id))
+          }
+        }
+      }
+    }
+
+    checkLatestHistory()
+
+    const onUpdated = () => {
+      if (location.pathname !== '/student/history') {
+        setHasNewHistory(true)
+      }
+    }
+    const onSeen = () => setHasNewHistory(false)
+
+    window.addEventListener('student-history-updated', onUpdated)
+    window.addEventListener('student-history-seen', onSeen)
+    return () => {
+      window.removeEventListener('student-history-updated', onUpdated)
+      window.removeEventListener('student-history-seen', onSeen)
+    }
+  }, [role, user?.id, studentName, location.pathname])
 
   const navItems =
     role === 'admin'
@@ -443,6 +503,12 @@ export const Sidebar: React.FC = () => {
                         <div
                           className="w-2.5 h-2.5 bg-rose-500 rounded-full animate-pulse shrink-0 shadow-[0_0_8px_rgba(244,63,94,0.8)]"
                           title="Please agree to the rules"
+                        />
+                      )}
+                      {role === 'student' && item.label === 'History' && hasNewHistory && (
+                        <div
+                          className="w-2.5 h-2.5 bg-rose-500 rounded-full animate-pulse shrink-0 shadow-[0_0_8px_rgba(244,63,94,0.8)]"
+                          title="New class history added"
                         />
                       )}
                     </>

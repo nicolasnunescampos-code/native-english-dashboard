@@ -152,6 +152,15 @@ const StudentHistory: React.FC = () => {
         pastClasses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         setClasses(pastClasses);
 
+        if (user?.id) {
+          localStorage.removeItem(`student_has_new_history_${user.id}`);
+          const latestGraded = pastClasses.find((c) => c.class_grade !== null || c.is_absent);
+          if (latestGraded?.id) {
+            localStorage.setItem(`student_seen_history_id_${user.id}`, String(latestGraded.id));
+          }
+          window.dispatchEvent(new CustomEvent('student-history-seen'));
+        }
+
         // 7. Fetch Exams
         if (studentId || user?.id) {
           const query = supabase
