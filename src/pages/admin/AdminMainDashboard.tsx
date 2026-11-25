@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { NativeQuestLeaderboardCard } from "@/components/grammar-rush/NativeQuestLeaderboardCard"
+import { RecentWhiteboardsCard } from "@/components/admin/RecentWhiteboardsCard"
 
 const AdminMainDashboard: React.FC = () => {
   const [timeFilter, setTimeFilter] = useState<'month' | 'year' | 'all'>('month')
@@ -300,12 +300,8 @@ const AdminMainDashboard: React.FC = () => {
         </Card>
       </div>
 
-      {/* SOCIAL-MEDIA SCREENSHOT-READY WEEKLY NATIVE QUEST RANKING */}
-      <NativeQuestLeaderboardCard
-        showSocialMediaButton={true}
-        title="Native Quest Weekly Ranking (Social Media Ready)"
-        subtitle="Tap 'Social Media Rank Card' to open a clean weekly championship poster ready to screenshot and post!"
-      />
+      {/* RECENT GRAMMAR WHITEBOARD SCREENSHOTS */}
+      <RecentWhiteboardsCard />
 
       {/* SOURCES BREAKDOWN */}
       <div className="mt-8 mb-2">

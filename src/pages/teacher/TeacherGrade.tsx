@@ -260,6 +260,11 @@ const TeacherGrade: React.FC = () => {
     e.preventDefault();
     if (!selectedClass?.id) return;
 
+    if (!isAbsent && classType === 'Grammar' && !whiteboardFile && !existingWhiteboardUrl) {
+      toast.error('Please upload or paste a whiteboard screenshot for Grammar classes.');
+      return;
+    }
+
     setSaving(true);
     try {
       let finalWhiteboardUrl: string | null = null;
@@ -546,6 +551,9 @@ const TeacherGrade: React.FC = () => {
                     <Label className="text-sm font-semibold flex items-center gap-2 text-indigo-900 dark:text-indigo-200">
                       <ImageIcon className="w-4 h-4 text-indigo-600" />
                       Whiteboard Screenshot (Grammar Class)
+                      <span className="text-[11px] font-bold uppercase px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
+                        Required
+                      </span>
                     </Label>
                     {whiteboardPreview && (
                       <Button
