@@ -1,10 +1,14 @@
 import { supabase, UserRole } from '@/lib/supabase';
 
 /**
- * Center-crops an image to a square and resizes it to `maxSize x maxSize` (default 400x400),
- * encoding as WebP (or JPEG fallback) so avatars stay ~30-60 KB.
+ * Center-crops an image to a square and resizes it to `maxSize x maxSize`,
+ * encoding as WebP (or JPEG fallback) so avatars stay very small (~5-50 KB).
  */
-export async function compressAvatarImage(file: File, maxSize = 400): Promise<{ blob: Blob; ext: string; mimeType: string }> {
+export async function compressAvatarImage(
+  file: File,
+  maxSize = 400,
+  quality = 0.82
+): Promise<{ blob: Blob; ext: string; mimeType: string }> {
   const bitmapUrl = URL.createObjectURL(file);
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -28,15 +32,15 @@ export async function compressAvatarImage(file: File, maxSize = 400): Promise<{ 
 
     ctx.drawImage(img, sx, sy, side, side, 0, 0, targetSize, targetSize);
 
-    const encode = (type: string, quality: number) =>
-      new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
+    const encode = (type: string, q: number) =>
+      new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, q));
 
-    let blob = await encode('image/webp', 0.82);
+    let blob = await encode('image/webp', quality);
     let ext = 'webp';
     let mimeType = 'image/webp';
 
     if (!blob || blob.type !== 'image/webp') {
-      blob = await encode('image/jpeg', 0.85);
+      blob = await encode('image/jpeg', quality);
       ext = 'jpg';
       mimeType = 'image/jpeg';
     }
@@ -48,9 +52,22 @@ export async function compressAvatarImage(file: File, maxSize = 400): Promise<{ 
   }
 }
 
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') resolve(reader.result);
+      else reject(new Error('Failed to read image data'));
+    };
+    reader.onerror = () => reject(new Error('Failed to read image data'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 /**
- * Compresses and uploads a user's avatar to `thumbnails/avatars/<userId>.<ext>` (overwriting any previous avatar),
- * updates Supabase Auth `user_metadata.avatar_url`, and best-effort syncs to `students`/`teachers`.
+ * Compresses and saves a user's avatar.
+ * Tries Supabase Storage (`thumbnails/avatars/`) first; if Storage RLS blocks non-admin roles,
+ * automatically falls back to a compact 200x200 WebP data URL stored in Supabase Auth `user_metadata`.
  */
 export async function uploadUserAvatar(params: {
   file: File;
@@ -60,7 +77,9 @@ export async function uploadUserAvatar(params: {
   teacherName?: string | null;
 }): Promise<string> {
   const { file, userId, role, studentId, teacherName } = params;
-  const { blob, ext, mimeType } = await compressAvatarImage(file, 400);
+  const { blob, ext, mimeType } = await compressAvatarImage(file, 400, 0.82);
+
+  let publicUrl: string | null = null;
 
   const filePath = `avatars/${userId}.${ext}`;
   const { error: uploadError } = await supabase.storage
@@ -70,29 +89,35 @@ export async function uploadUserAvatar(params: {
       upsert: true,
     });
 
-  if (uploadError) throw uploadError;
-
-  const { data } = supabase.storage.from('thumbnails').getPublicUrl(filePath);
-  const publicUrl = `${data.publicUrl}?v=${Date.now()}`;
+  if (!uploadError) {
+    const { data } = supabase.storage.from('thumbnails').getPublicUrl(filePath);
+    publicUrl = `${data.publicUrl}?v=${Date.now()}`;
+  } else {
+    // Fallback for teachers/students if storage.objects RLS blocks uploads to `thumbnails`
+    const { blob: compactBlob } = await compressAvatarImage(file, 200, 0.75);
+    publicUrl = await blobToDataUrl(compactBlob);
+  }
 
   const { error: authErr } = await supabase.auth.updateUser({
     data: { avatar_url: publicUrl },
   });
   if (authErr) throw authErr;
 
-  // Best-effort sync to students / teachers table (ignores if avatar_url column isn't added yet)
-  if (role === 'student' && studentId) {
-    await supabase
-      .from('students')
-      .update({ avatar_url: publicUrl })
-      .eq('id', studentId)
-      .then(() => {});
-  } else if (role === 'teacher' && teacherName) {
-    await supabase
-      .from('teachers')
-      .update({ avatar_url: publicUrl })
-      .ilike('name', teacherName)
-      .then(() => {});
+  // Best-effort sync to students / teachers table (ignores if column or RLS blocks it)
+  try {
+    if (role === 'student' && studentId) {
+      await supabase
+        .from('students')
+        .update({ avatar_url: publicUrl })
+        .eq('id', studentId);
+    } else if (role === 'teacher' && teacherName) {
+      await supabase
+        .from('teachers')
+        .update({ avatar_url: publicUrl })
+        .ilike('name', teacherName);
+    }
+  } catch {
+    // Non-blocking
   }
 
   return publicUrl;
@@ -114,22 +139,27 @@ export async function removeUserAvatar(params: {
   });
   if (authErr) throw authErr;
 
-  await supabase.storage
-    .from('thumbnails')
-    .remove([`avatars/${userId}.webp`, `avatars/${userId}.jpg`])
-    .catch(() => {});
+  try {
+    await supabase.storage
+      .from('thumbnails')
+      .remove([`avatars/${userId}.webp`, `avatars/${userId}.jpg`]);
+  } catch {
+    // Non-blocking
+  }
 
-  if (role === 'student' && studentId) {
-    await supabase
-      .from('students')
-      .update({ avatar_url: null })
-      .eq('id', studentId)
-      .then(() => {});
-  } else if (role === 'teacher' && teacherName) {
-    await supabase
-      .from('teachers')
-      .update({ avatar_url: null })
-      .ilike('name', teacherName)
-      .then(() => {});
+  try {
+    if (role === 'student' && studentId) {
+      await supabase
+        .from('students')
+        .update({ avatar_url: null })
+        .eq('id', studentId);
+    } else if (role === 'teacher' && teacherName) {
+      await supabase
+        .from('teachers')
+        .update({ avatar_url: null })
+        .ilike('name', teacherName);
+    }
+  } catch {
+    // Non-blocking
   }
 }
