@@ -6,6 +6,7 @@ import { Link } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 import { toLocalDate, getTimeZoneLabel } from "@/lib/dateUtils"
 import { fetchUpcomingClassType, ClassType, getNextLevel, cleanStudentName } from "@/lib/courseUtils"
+import { stripWhiteboardTag } from "@/lib/whiteboardUtils"
 import { UnlockExamDialog } from "@/components/UnlockExamDialog"
 import { ReadOnlyCalendar } from "@/components/calendar/ReadOnlyCalendar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -276,7 +277,8 @@ export default function TeacherSchedule() {
             (a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`)
         )[0]
         if (lastClassWithNotes && lastClassWithNotes.notes) {
-            studentNotes[student] = lastClassWithNotes.notes
+            const cleaned = stripWhiteboardTag(lastClassWithNotes.notes)
+            if (cleaned) studentNotes[student] = cleaned
         }
       }
 

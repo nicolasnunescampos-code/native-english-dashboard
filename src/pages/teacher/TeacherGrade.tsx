@@ -9,7 +9,14 @@ import { supabase, Class } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Sparkles, Loader2 } from 'lucide-react';
+import { Sparkles, Loader2, Image as ImageIcon, Upload, X } from 'lucide-react';
+import {
+  extractWhiteboardUrl,
+  stripWhiteboardTag,
+  appendWhiteboardTag,
+  uploadWhiteboardScreenshot,
+  cleanupExpiredWhiteboards,
+} from '@/lib/whiteboardUtils';
 import {
   Select,
   SelectContent,
@@ -45,6 +52,48 @@ const TeacherGrade: React.FC = () => {
   const [isAbsent, setIsAbsent] = useState(false);
   const [notes, setNotes] = useState<string>('');
   const [improvingFeedback, setImprovingFeedback] = useState(false);
+  const [whiteboardFile, setWhiteboardFile] = useState<File | null>(null);
+  const [whiteboardPreview, setWhiteboardPreview] = useState<string | null>(null);
+  const [existingWhiteboardUrl, setExistingWhiteboardUrl] = useState<string | null>(null);
+
+  const handleSelectWhiteboardFile = (file: File | null | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file (PNG, JPG, WEBP).');
+      return;
+    }
+    if (whiteboardPreview && whiteboardPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(whiteboardPreview);
+    }
+    setWhiteboardFile(file);
+    setWhiteboardPreview(URL.createObjectURL(file));
+  };
+
+  const handleRemoveWhiteboard = () => {
+    if (whiteboardPreview && whiteboardPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(whiteboardPreview);
+    }
+    setWhiteboardFile(null);
+    setWhiteboardPreview(null);
+    setExistingWhiteboardUrl(null);
+  };
+
+  const handlePasteWhiteboard = (e: React.ClipboardEvent) => {
+    if (isAbsent || classType !== 'Grammar') return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile();
+        if (file) {
+          e.preventDefault();
+          handleSelectWhiteboardFile(file);
+          toast.success('Whiteboard screenshot pasted!');
+          break;
+        }
+      }
+    }
+  };
 
   const handleImproveFeedback = async () => {
     if (!notes.trim()) {
@@ -166,7 +215,11 @@ const TeacherGrade: React.FC = () => {
     setClassLevel(cls.class_level || '');
     setNoChapter(false);
     setIsAbsent(cls.is_absent || false);
-    setNotes(cls.notes || '');
+    setNotes(stripWhiteboardTag(cls.notes));
+    const existingWb = extractWhiteboardUrl(cls);
+    setExistingWhiteboardUrl(existingWb);
+    setWhiteboardPreview(existingWb);
+    setWhiteboardFile(null);
   };
 
   const handleClassSelect = (classIdStr: string) => {
@@ -209,6 +262,17 @@ const TeacherGrade: React.FC = () => {
 
     setSaving(true);
     try {
+      let finalWhiteboardUrl: string | null = null;
+      if (!isAbsent && classType === 'Grammar') {
+        if (whiteboardFile) {
+          finalWhiteboardUrl = await uploadWhiteboardScreenshot(whiteboardFile, selectedClass.id);
+          cleanupExpiredWhiteboards();
+        } else if (existingWhiteboardUrl) {
+          finalWhiteboardUrl = existingWhiteboardUrl;
+        }
+      }
+
+      const cleanNotes = stripWhiteboardTag(notes);
       const payload: any = {
         class_grade: parseGrade(classGrade),
         speaking_grade: parseGrade(speakingGrade),
@@ -219,7 +283,8 @@ const TeacherGrade: React.FC = () => {
         class_type: isAbsent ? null : classType || null,
         class_level: isAbsent ? null : classLevel || null,
         is_absent: isAbsent,
-        notes: notes || null,
+        notes: cleanNotes || null,
+        whiteboard_url: finalWhiteboardUrl,
       };
 
       let { data, error } = await supabase
@@ -228,15 +293,37 @@ const TeacherGrade: React.FC = () => {
         .eq('id', selectedClass.id)
         .select('*');
 
-      if (error && (error.code === '42703' || error.message?.includes('listening_grade'))) {
-        delete payload.listening_grade;
+      if (error && (error.code === '42703' || error.message?.includes('listening_grade') || error.message?.includes('whiteboard_url'))) {
+        if (error.message?.includes('listening_grade')) {
+          delete payload.listening_grade;
+        }
+        if (error.message?.includes('whiteboard_url') || error.code === '42703') {
+          delete payload.whiteboard_url;
+          if (finalWhiteboardUrl) {
+            payload.notes = appendWhiteboardTag(cleanNotes, finalWhiteboardUrl);
+          }
+        }
         const retry = await supabase
           .from('classes')
           .update(payload)
           .eq('id', selectedClass.id)
           .select('*');
-        if (retry.error) throw retry.error;
-        data = retry.data;
+        if (retry.error) {
+          if (retry.error.code === '42703' && 'listening_grade' in payload) {
+            delete payload.listening_grade;
+            const retry2 = await supabase
+              .from('classes')
+              .update(payload)
+              .eq('id', selectedClass.id)
+              .select('*');
+            if (retry2.error) throw retry2.error;
+            data = retry2.data;
+          } else {
+            throw retry.error;
+          }
+        } else {
+          data = retry.data;
+        }
       } else if (error) {
         console.error("Supabase Error:", error);
         throw error;
@@ -305,7 +392,7 @@ const TeacherGrade: React.FC = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} onPaste={handlePasteWhiteboard} className="space-y-6">
               
               {/* Absent Toggle */}
               <div className="flex items-center space-x-2 bg-red-50 p-4 rounded-md border border-red-100">
@@ -451,6 +538,66 @@ const TeacherGrade: React.FC = () => {
                   />
                 )}
               </div>
+
+              {/* Grammar Whiteboard Screenshot */}
+              {classType === 'Grammar' && (
+                <div className="space-y-2 rounded-xl border border-indigo-200/80 dark:border-indigo-800/50 bg-indigo-50/40 dark:bg-indigo-950/20 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="text-sm font-semibold flex items-center gap-2 text-indigo-900 dark:text-indigo-200">
+                      <ImageIcon className="w-4 h-4 text-indigo-600" />
+                      Whiteboard Screenshot (Grammar Class)
+                    </Label>
+                    {whiteboardPreview && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleRemoveWhiteboard}
+                        className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <X className="w-3.5 h-3.5 mr-1" />
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Upload or paste (<kbd className="px-1 py-0.5 bg-background border rounded text-[10px]">Cmd/Ctrl + V</kbd>) a screenshot of the whiteboard. Visible to the student, teachers, and admins for 10 days before automatic deletion.
+                  </p>
+
+                  {whiteboardPreview ? (
+                    <div className="mt-2 rounded-lg overflow-hidden border bg-white dark:bg-slate-950">
+                      <img
+                        src={whiteboardPreview}
+                        alt="Whiteboard preview"
+                        className="max-h-64 w-full object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <label
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        handleSelectWhiteboardFile(e.dataTransfer.files?.[0]);
+                      }}
+                      className="mt-2 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-indigo-300 dark:border-indigo-700 bg-background/70 hover:bg-background p-6 cursor-pointer transition-colors"
+                    >
+                      <Upload className="w-6 h-6 text-indigo-500" />
+                      <span className="text-xs font-medium text-foreground">
+                        Click to upload, drag & drop, or paste screenshot
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">
+                        PNG, JPG, or WEBP
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleSelectWhiteboardFile(e.target.files?.[0])}
+                      />
+                    </label>
+                  )}
+                </div>
+              )}
               </>
               )}
 

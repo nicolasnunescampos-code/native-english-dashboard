@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase, Class, ExamSubmission, Question, GrammarGameSession } from '@/lib/supabase';
+import { WhiteboardViewer } from '@/components/WhiteboardPreviewModal';
+import { extractWhiteboardUrl, stripWhiteboardTag } from '@/lib/whiteboardUtils';
 import { formatChapterLabel } from '@/data/grammarRushCurriculum';
 import {
   BarChart,
@@ -1472,8 +1474,18 @@ export default function TeacherStudents() {
 
                   {/* NOTES */}
                   <div className="bg-white/45 dark:bg-white/[0.04] border border-white/60 dark:border-white/10 p-3.5 rounded-2xl text-sm italic text-foreground/85">
-                    “{cls.notes || 'No notes provided.'}”
+                    “{stripWhiteboardTag(cls.notes) || 'No notes provided.'}”
                   </div>
+                  {(() => {
+                    const wbUrl = extractWhiteboardUrl(cls);
+                    return wbUrl ? (
+                      <WhiteboardViewer
+                        url={wbUrl}
+                        classDate={cls.date}
+                        subtitle={`${cls.student_name || studentParam} • ${cls.date}`}
+                      />
+                    ) : null;
+                  })()}
                 </CardContent>
               </Card>
             ))

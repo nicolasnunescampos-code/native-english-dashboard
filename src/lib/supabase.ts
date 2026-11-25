@@ -58,6 +58,7 @@ export interface Class {
   class_type?: string;
   is_absent?: boolean;
   notes?: string | null;
+  whiteboard_url?: string | null;
   teachers?: Teacher; // Optional, for joined queries
 }
 

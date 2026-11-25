@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { supabase, Class, ExamSubmission } from '@/lib/supabase';
+import { WhiteboardViewer } from '@/components/WhiteboardPreviewModal';
+import { extractWhiteboardUrl, stripWhiteboardTag } from '@/lib/whiteboardUtils';
 import { useAuth } from '@/contexts/AuthContext';
 import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -185,7 +187,7 @@ const StudentHistory: React.FC = () => {
   const classesCompletedCount = completedClasses.length;
 
   const teacherComments = classes.filter(
-    cls => cls.notes && cls.notes.trim().length > 0
+    cls => stripWhiteboardTag(cls.notes).length > 0
   );
   const feedbacksCount = teacherComments.length;
 
@@ -577,9 +579,19 @@ const StudentHistory: React.FC = () => {
                       <div className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 rounded-xl p-4 text-sm text-foreground relative">
                         <Quote className="w-4 h-4 text-blue-600 mb-1.5 opacity-80" />
                         <p className="italic leading-relaxed whitespace-pre-wrap text-slate-800 dark:text-slate-200">
-                          "{cls.notes}"
+                          "{stripWhiteboardTag(cls.notes)}"
                         </p>
                       </div>
+                      {(() => {
+                        const wbUrl = extractWhiteboardUrl(cls);
+                        return wbUrl ? (
+                          <WhiteboardViewer
+                            url={wbUrl}
+                            classDate={cls.date}
+                            subtitle={`${cls.title || 'Grammar Class'} • ${format(parseISO(cls.date), 'MMMM d, yyyy')}`}
+                          />
+                        ) : null;
+                      })()}
                     </CardContent>
                   </Card>
                 ))}
@@ -668,11 +680,23 @@ const StudentHistory: React.FC = () => {
                   </div>
 
                   {/* Notes if any */}
-                  {cls.notes && (
+                  {stripWhiteboardTag(cls.notes) && (
                     <div className="mt-4 bg-muted/60 p-3 rounded-xl text-sm italic text-muted-foreground">
-                      “{cls.notes}”
+                      “{stripWhiteboardTag(cls.notes)}”
                     </div>
                   )}
+
+                  {/* Grammar Whiteboard Screenshot */}
+                  {(() => {
+                    const wbUrl = extractWhiteboardUrl(cls);
+                    return wbUrl ? (
+                      <WhiteboardViewer
+                        url={wbUrl}
+                        classDate={cls.date}
+                        subtitle={`${cls.title || 'Grammar Class'} • ${format(parseISO(cls.date), 'MMMM d, yyyy')}`}
+                      />
+                    ) : null;
+                  })()}
                 </CardContent>
               </Card>
             ))
@@ -702,8 +726,18 @@ const StudentHistory: React.FC = () => {
                   </div>
                   <div className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 rounded-xl p-4 text-sm">
                     <Quote className="w-4 h-4 text-blue-600 mb-1" />
-                    <p className="italic text-slate-800 dark:text-slate-200">"{cls.notes}"</p>
+                    <p className="italic text-slate-800 dark:text-slate-200">"{stripWhiteboardTag(cls.notes)}"</p>
                   </div>
+                  {(() => {
+                    const wbUrl = extractWhiteboardUrl(cls);
+                    return wbUrl ? (
+                      <WhiteboardViewer
+                        url={wbUrl}
+                        classDate={cls.date}
+                        subtitle={`${cls.title || 'Grammar Class'} • ${format(parseISO(cls.date), 'MMMM d, yyyy')}`}
+                      />
+                    ) : null;
+                  })()}
                 </CardContent>
               </Card>
             ))

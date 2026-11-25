@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { supabase, Class } from '@/lib/supabase';
+import { WhiteboardViewer } from '@/components/WhiteboardPreviewModal';
+import { extractWhiteboardUrl, cleanupExpiredWhiteboards } from '@/lib/whiteboardUtils';
 import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -181,6 +183,7 @@ const AdminGrades: React.FC = () => {
     };
 
     fetchGradedClasses();
+    cleanupExpiredWhiteboards();
   }, []);
 
   if (loading) {
@@ -258,12 +261,13 @@ const AdminGrades: React.FC = () => {
                 <TableHead>Listening</TableHead>
                 <TableHead>Grammar</TableHead>
                 <TableHead>Reading</TableHead>
+                <TableHead>Whiteboard</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredClasses.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                     {selectedTeacher === 'all' ? 'No recent grades or absences' : `No recent activity found for ${selectedTeacher}`}
                   </TableCell>
                 </TableRow>
@@ -284,7 +288,7 @@ const AdminGrades: React.FC = () => {
                     </TableCell>
                     
                     {cls.is_absent ? (
-                      <TableCell colSpan={5}>
+                      <TableCell colSpan={6}>
                         <div className="flex items-center text-red-600 font-medium bg-red-100/50 px-3 py-1.5 rounded-md w-fit border border-red-200">
                           <span className="mr-2">✗</span> Student was Absent
                         </div>
@@ -298,6 +302,21 @@ const AdminGrades: React.FC = () => {
                         <TableCell>{cls.listening_grade ?? '-'}</TableCell>
                         <TableCell>{cls.grammar_grade ?? '-'}</TableCell>
                         <TableCell>{cls.reading_grade ?? '-'}</TableCell>
+                        <TableCell>
+                          {(() => {
+                            const wbUrl = extractWhiteboardUrl(cls);
+                            return wbUrl ? (
+                              <WhiteboardViewer
+                                url={wbUrl}
+                                classDate={cls.date}
+                                compact
+                                subtitle={`${cls.student_name || 'Student'} • ${cls.title} • ${format(parseISO(cls.date), 'MMM d, yyyy')}`}
+                              />
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            );
+                          })()}
+                        </TableCell>
                       </>
                     )}
                   </TableRow>
