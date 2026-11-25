@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { RecentWhiteboardsCard } from "@/components/admin/RecentWhiteboardsCard"
+import { DailyClassSummary } from "@/components/admin/DailyClassSummary"
 
 const AdminMainDashboard: React.FC = () => {
   const [timeFilter, setTimeFilter] = useState<'month' | 'year' | 'all'>('month')
@@ -240,65 +241,8 @@ const AdminMainDashboard: React.FC = () => {
         </Card>
       </div>
 
-      {/* STUDENT 360° CARDS DIRECTORY (Matches Teacher View + Native Quest Progress) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <Card className="border-sky-500/30 bg-gradient-to-br from-sky-500/[0.06] to-indigo-500/[0.04]">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-3 text-lg">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-sky-400/20 to-blue-600/20 border border-sky-400/30 flex items-center justify-center text-sky-600 dark:text-sky-400 shadow-sm">
-                <GraduationCap className="h-5 w-5" />
-              </div>
-              <div>
-                <span>Student 360° Cards &amp; Native Quest Progress</span>
-                <p className="text-xs font-normal text-muted-foreground mt-0.5">
-                  Same directory &amp; profile cards teachers see — plus full Native Quest mastery
-                </p>
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            <p className="text-xs sm:text-sm text-muted-foreground">
-              Inspect any student&apos;s CEFR stage, skill averages, exams, class history, and Native Quest game progress.
-            </p>
-            <Button asChild className="shrink-0 gap-1.5">
-              <Link to="/admin/student-history">
-                <Users className="w-4 h-4" />
-                Open Student Cards
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="border-amber-500/30 bg-gradient-to-br from-amber-500/[0.06] to-orange-500/[0.04]">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-3 text-lg">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-400/20 to-orange-500/20 border border-amber-400/30 flex items-center justify-center text-amber-600 dark:text-amber-400 shadow-sm">
-                <Zap className="h-5 w-5" />
-              </div>
-              <div>
-                <span>Native Quest Tracker &amp; Question Bank</span>
-                <p className="text-xs font-normal text-muted-foreground mt-0.5">
-                  Monitor game sessions, pronunciation scores, and manage questions
-                </p>
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs sm:text-sm text-muted-foreground">
-              View detailed session logs or screenshot the weekly podium below to post on social media!
-            </p>
-            <div className="flex items-center gap-2">
-              <Button asChild variant="outline" size="sm">
-                <Link to="/admin/grammar-rush-questions">Question Bank</Link>
-              </Button>
-              <Button asChild size="sm" className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold">
-                <Link to="/admin/grammar-rush-tracking">Full Tracker</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* TODAY'S CLASSES DAILY SUMMARY */}
+      <DailyClassSummary compact />
 
       {/* RECENT GRAMMAR WHITEBOARD SCREENSHOTS */}
       <RecentWhiteboardsCard />
