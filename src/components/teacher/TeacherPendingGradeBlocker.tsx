@@ -416,22 +416,22 @@ export const TeacherPendingGradeBlocker: React.FC = () => {
     <>
       {/* ─────────────────────────────────────────────────────────────
           CASE 1: Teacher is on /teacher/grade
-          Do NOT block whole screen with backdrop so they can grade,
-          instead show sticky urgent top banner.
+          Use fixed bottom-right compact banner so it NEVER participates
+          in DashboardLayout's flex row or obstructs the grading form.
       ───────────────────────────────────────────────────────────── */}
       {isOnGradePage && (
-        <div className="sticky top-0 z-40 mb-6 rounded-2xl bg-destructive/10 border-2 border-destructive/30 p-4 shadow-sm backdrop-blur-md animate-fade-in">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-destructive/15 text-destructive flex items-center justify-center shrink-0">
-                <ShieldAlert className="w-5 h-5" />
+        <div className="fixed bottom-4 right-4 z-40 w-[min(92vw,400px)] rounded-2xl bg-background/95 border border-destructive/30 p-3.5 shadow-lg backdrop-blur-md animate-fade-in">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-destructive/15 text-destructive flex items-center justify-center shrink-0">
+                <ShieldAlert className="w-4 h-4" />
               </div>
-              <div>
-                <p className="font-bold text-sm text-foreground">
-                  Platform Locked: {pendingClasses.length} class{pendingClasses.length > 1 ? 'es' : ''} from today awaiting grades or absence record
+              <div className="min-w-0">
+                <p className="font-bold text-xs text-foreground truncate">
+                  {pendingClasses.length} class{pendingClasses.length > 1 ? 'es' : ''} awaiting grades today
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Complete grading on this page or record absences. Other dashboard pages remain locked until resolved.
+                <p className="text-[11px] text-muted-foreground truncate">
+                  Finish grading to unlock other pages.
                 </p>
               </div>
             </div>
@@ -441,9 +441,9 @@ export const TeacherPendingGradeBlocker: React.FC = () => {
               size="sm"
               onClick={handleRefresh}
               disabled={refreshing}
-              className="text-xs rounded-xl border-destructive/30 hover:bg-destructive/10 text-destructive dark:text-red-400 self-end sm:self-auto"
+              className="h-7 px-2.5 text-xs rounded-xl border-destructive/30 hover:bg-destructive/10 text-destructive dark:text-red-400 shrink-0"
             >
-              <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3 h-3 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
           </div>
